@@ -89,6 +89,13 @@ export default function Toolbar({
           <path d="M19 21l-7-4.5L5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
         </svg>
       </button>
+      {show('showBookmarksBar', true) && (
+        <button className="tool-btn" title={settings && settings.showBookmarksBar ? 'Ocultar barra de marcadores' : 'Mostrar barra de marcadores'} onClick={() => window.api.setSetting({ showBookmarksBar: !(settings && settings.showBookmarksBar) })}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+        </button>
+      )}
       {show('showDownloadsButton', true) && (
         <button className="tool-btn" title="Descargas (Ctrl+J)" onClick={() => onOpenPage('downloads')}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

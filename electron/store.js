@@ -72,6 +72,7 @@ const DEFAULT_SETTINGS = {
   openFolderWhenDone: false,
   offerPasswordSave: true,
   autofillEnabled: true,
+  searchSuggestionsEnabled: true,
   blockPopups: true,
   autoplayPolicy: 'user-gesture-required',
   hardwareAcceleration: true,

@@ -3,7 +3,7 @@ import ContextMenu from './ContextMenu.jsx'
 import WindowControls from './WindowControls.jsx'
 import { I } from './icons.jsx'
 
-export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore, onGroup, splitWith, onSplit, onMute, onMoveWindow, onNewWindowUrl, closedCount }) {
+export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore, onGroup, splitWith, onSplit, onMute, onMoveWindow, onNewWindowUrl, closedCount, onRestoreAll, onReloadAll, onNavigateTab }) {
   const [menu, setMenu] = useState(null)
   const [manageOpen, setManageOpen] = useState(false)
   let dragId = null
@@ -125,6 +125,12 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
               }
             }}
             onContextMenu={(e) => openMenu(e, t)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')
+              if (url && /^https?:/.test(url.trim()) && onNavigateTab) onNavigateTab(t.id, url.trim())
+            }}
             title={t.title || 'Nueva pestaña'}
           >
             {t.group && <span className="tab-group-stripe" style={{ background: t.group.color }} />}
@@ -203,6 +209,8 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
                 <button className="tm-action" onClick={() => { setManageOpen(false); onSplit(activeTab && activeTab.id) }}>
                   {splitWith ? 'Salir de la vista dividida' : 'Dividir pantalla'}
                 </button>
+                <button className="tm-action" onClick={() => { setManageOpen(false); onRestoreAll && onRestoreAll() }} disabled={!closedCount}>Reabrir todas las cerradas</button>
+                <button className="tm-action" onClick={() => { setManageOpen(false); onReloadAll && onReloadAll() }}>Recargar todas las pestañas</button>
                 <button className="tm-action" onClick={closeOthers} disabled={tabs.length < 2}>Cerrar otras pestañas</button>
                 <button className="tm-action" onClick={closeToRight} disabled={activeIdx < 0 || activeIdx === tabs.length - 1}>Cerrar pestañas a la derecha</button>
                 <button className="tm-action danger" onClick={closeAll} disabled={tabs.length === 0}>Cerrar todas las pestañas</button>

@@ -185,6 +185,7 @@
           <h2>Búsqueda</h2>
           <div class="card">
             <div class="field"><div class="meta"><div class="label">Motor predeterminado</div><div class="desc">Se usa al buscar desde la barra de direcciones</div></div><div class="control"><select id="defaultEngine"></select></div></div>
+            <div class="field"><div class="meta"><div class="label">Sugerencias de búsqueda</div><div class="desc">Mostrar predicciones del motor mientras escribes</div></div><div class="control"><label class="switch"><input type="checkbox" id="searchSuggestionsEnabled" /><span class="track"><span class="thumb"></span></span></label></div></div>
             <div id="customEngines"></div>
             <div class="add-engine">
               <input type="text" id="newName" placeholder="Nombre (ej. Startpage)" />
@@ -417,6 +418,7 @@
         document.getElementById('autoplayPolicy').value = settings.autoplayPolicy || 'user-gesture-required'
         document.getElementById('defaultZoom').value = String(settings.defaultZoom || 1)
         document.getElementById('autofillEnabled').checked = settings.autofillEnabled !== false
+        document.getElementById('searchSuggestionsEnabled').checked = settings.searchSuggestionsEnabled !== false
         var af = settings.autofillProfile || {}
         document.getElementById('afName').value = af.name || ''
         document.getElementById('afEmail').value = af.email || ''
@@ -617,6 +619,7 @@
         bind('autoplayPolicy', 'autoplayPolicy')
         bind('defaultZoom', 'defaultZoom', { parse: function (el) { return parseFloat(el.value) || 1 } })
         bind('autofillEnabled', 'autofillEnabled')
+        bind('searchSuggestionsEnabled', 'searchSuggestionsEnabled')
         bind('homePage', 'homePage')
         bind('blockAds', 'blockAds')
         bind('blockCookies', 'blockThirdPartyCookies')

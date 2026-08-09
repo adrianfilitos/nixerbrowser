@@ -3,6 +3,23 @@ const store = require('./store')
 const { currentCtx, activeWc, sendUi } = require('./ctx')
 const { broadcastSettings } = require('./util')
 
+function readAloud(wc, text) {
+  if (!wc) return
+  const content = text || ''
+  const js = `(function () {
+    try {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+        const u = new SpeechSynthesisUtterance(${JSON.stringify(content)})
+        u.lang = 'es'
+        window.speechSynthesis.speak(u)
+      }
+    } catch (e) {}
+    return true
+  })()`
+  try { wc.executeJavaScript(js) } catch {}
+}
+
 function createMenus(deps) {
   const { createWindow, extractReader, savePageOf, saveAsUrl, captureScreenshot, togglePip, ai, readerGet, readerPut } = deps
 
@@ -68,6 +85,7 @@ function createMenus(deps) {
           { label: 'Buscar en página', accelerator: 'CmdOrCtrl+F', click: () => act('open-find') },
           { label: 'Paleta de comandos', accelerator: 'CmdOrCtrl+Shift+P', click: () => act('open-palette') },
           { label: 'Barra de direcciones', accelerator: 'CmdOrCtrl+L', click: () => act('focus-address') },
+          { label: 'Enfocar barra de direcciones', accelerator: 'F6', click: () => act('focus-address') },
           { label: 'Herramientas de desarrollo', accelerator: 'F12', click: () => { const w = wc(); if (w) w.openDevTools() } },
           { type: 'separator' },
           { label: 'Copiar URL', accelerator: 'CmdOrCtrl+Shift+L', click: () => act('copy-url') },
@@ -104,6 +122,7 @@ function createMenus(deps) {
         label: 'Marcadores',
         submenu: [
           { label: 'Añadir esta página', accelerator: 'CmdOrCtrl+D', click: () => act('bookmark-page') },
+          { label: 'Añadir todas las pestañas', click: () => act('bookmark-all') },
           { label: 'Gestionar marcadores', accelerator: 'CmdOrCtrl+Shift+O', click: () => act('open-page', 'bookmarks') },
           { type: 'separator' },
           {
@@ -160,22 +179,34 @@ function createMenus(deps) {
       template.push({ label: 'Cortar', role: 'cut' }, { label: 'Copiar', role: 'copy' }, { label: 'Pegar', role: 'paste' }, { label: 'Seleccionar todo', role: 'selectAll' })
       template.push({ type: 'separator' })
     }
-    if (params.selectionText) {
-      template.push({ label: 'Buscar: "' + params.selectionText.slice(0, 40) + '"', click: () => sendUi(ctx, 'open-tab', store.searchUrl(params.selectionText)) })
-      template.push({ label: 'Copiar', role: 'copy' })
-      template.push({ label: 'Copiar como texto plano', click: () => clipboard.writeText(params.selectionText) })
-      template.push({ label: 'Traducir selección', click: () => sendUi(ctx, 'open-tab', 'https://translate.google.com/?sl=auto&tl=es&text=' + encodeURIComponent(params.selectionText)) })
-      template.push({
-        label: 'Explicar con la IA',
-        click: async () => {
-          const res = await ai.chat([{ role: 'user', content: 'Explica brevemente lo siguiente:\n\n' + params.selectionText.slice(0, 8000) }])
-          const text = res && res.text ? res.text : 'No se pudo explicar: ' + ((res && res.error) || 'sin respuesta')
-          const rid = readerPut({ title: 'Explicación', url: '', text })
-          sendUi(ctx, 'open-reader', rid)
-        },
-      })
-      template.push({ type: 'separator' })
-    }
+  if (params.selectionText) {
+    template.push({ label: 'Buscar: "' + params.selectionText.slice(0, 40) + '"', click: () => sendUi(ctx, 'open-tab', store.searchUrl(params.selectionText)) })
+    template.push({ label: 'Copiar', role: 'copy' })
+    template.push({ label: 'Copiar como texto plano', click: () => clipboard.writeText(params.selectionText) })
+    template.push({ label: 'Copiar enlace con título', click: () => { const t = (params.linkText || params.selectionText || '').trim(); clipboard.writeText((t ? t + ' ' : '') + (params.linkURL || '')) } })
+    template.push({ label: 'Traducir selección', click: () => sendUi(ctx, 'open-tab', 'https://translate.google.com/?sl=auto&tl=es&text=' + encodeURIComponent(params.selectionText)) })
+    template.push({ label: 'Leer selección en voz alta', click: () => readAloud(wc, params.selectionText) })
+    template.push({ label: 'Contar palabras', click: () => { const w = params.selectionText.trim().split(/\s+/).filter(Boolean).length; const c = params.selectionText.length; sendUi(ctx, 'ui-toast', { text: w + ' palabras · ' + c + ' caracteres', kind: 'info' }) } })
+    template.push({
+      label: 'Explicar con la IA',
+      click: async () => {
+        const res = await ai.chat([{ role: 'user', content: 'Explica brevemente lo siguiente:\n\n' + params.selectionText.slice(0, 8000) }])
+        const text = res && res.text ? res.text : 'No se pudo explicar: ' + ((res && res.error) || 'sin respuesta')
+        const rid = readerPut({ title: 'Explicación', url: '', text })
+        sendUi(ctx, 'open-reader', rid)
+      },
+    })
+    template.push({
+      label: 'Corregir gramática con la IA',
+      click: async () => {
+        const res = await ai.chat([{ role: 'user', content: 'Corrige la gramática y ortografía de este texto, devuelve solo el texto corregido:\n\n' + params.selectionText.slice(0, 8000) }])
+        const text = res && res.text ? res.text : 'No se pudo corregir: ' + ((res && res.error) || 'sin respuesta')
+        const rid = readerPut({ title: 'Texto corregido', url: '', text })
+        sendUi(ctx, 'open-reader', rid)
+      },
+    })
+    template.push({ type: 'separator' })
+  }
     template.push(
       { label: 'Atrás', click: () => { if (wc && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack() } },
       { label: 'Adelante', click: () => { if (wc && wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward() } },
@@ -205,6 +236,8 @@ function createMenus(deps) {
     },
   })
   template.push({ label: 'Ver código fuente', click: () => { const u = wc && wc.getURL(); if (u && /^https?:/.test(u)) sendUi(ctx, 'open-tab', 'view-source:' + u) } })
+  template.push({ label: 'Leer página en voz alta', click: () => readAloud(wc, '') })
+  template.push({ label: 'Ver código QR', click: () => { const u = wc && wc.getURL(); if (u && /^https?:/.test(u)) sendUi(ctx, 'open-tab', 'nixer://qr?url=' + encodeURIComponent(u)) } })
   template.push({ label: 'Abrir en ventana de incógnito', click: () => { const u = wc && wc.getURL(); if (u && /^https?:/.test(u)) { const c2 = createWindow({ incognito: true }); setTimeout(() => sendUi(c2, 'open-tab', u), 900) } } })
     template.push({ type: 'separator' })
     template.push({ label: 'Inspeccionar elemento', click: () => wc && wc.openDevTools() })

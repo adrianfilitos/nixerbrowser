@@ -63,7 +63,7 @@
               '<span class="state ' + d.state + '"></span>' +
               '<div class="bar"><div style="width:' + (d.state === 'completed' ? 100 : pct) + '%"></div></div>' +
               '<span class="actions">' +
-              (d.state === 'in-progress' ? '<button class="link cancel">Cancelar</button>' : '<button class="link open">Abrir</button><button class="link show">Mostrar</button>') +
+              (d.state === 'in-progress' ? '<button class="link cancel">Cancelar</button>' : '<button class="link open">Abrir</button><button class="link show">Mostrar</button><button class="link copy">Copiar</button>') +
               '</span>'
             row.querySelector('.name').textContent = d.name
             row.querySelector('.state').textContent =
@@ -74,6 +74,15 @@
             if (open) open.onclick = function () { if (d.path) browserAPI.downloads.open(d.path) }
             var show = row.querySelector('.show')
             if (show) show.onclick = function () { if (d.path) browserAPI.downloads.show(d.path) }
+            var copy = row.querySelector('.copy')
+            if (copy) copy.onclick = function () {
+              var ta = document.createElement('textarea')
+              ta.value = d.url
+              document.body.appendChild(ta)
+              ta.select()
+              try { document.execCommand('copy') } catch {}
+              document.body.removeChild(ta)
+            }
             list.appendChild(row)
           })
         })

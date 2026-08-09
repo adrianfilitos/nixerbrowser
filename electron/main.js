@@ -427,7 +427,7 @@ function registerIpc() {
   })
   ipcMain.handle('search:engines', () => ({ engines: store.engines(), defaultId: store.settings().defaultSearchEngine }))
   ipcMain.handle('search:url', (_e, q) => store.searchUrl(q))
-  ipcMain.handle('search:suggest', (_e, q) => search.searchSuggestions(q))
+  ipcMain.handle('search:suggest', (_e, q) => (store.settings().searchSuggestionsEnabled === false ? [] : search.searchSuggestions(q)))
   ipcMain.handle('ai:chat', (_e, messages) => ai.chat(messages || []))
   ipcMain.handle('adblock:stats', () => adblock.stats())
   ipcMain.handle('adblock:refresh', () => { adblock.refresh(); return true })

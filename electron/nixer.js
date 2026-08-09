@@ -30,8 +30,9 @@ function nixerToFilePath(url) {
   let rel = decodeURIComponent(u.pathname).replace(/^\/+/, '')
   let file
   if (host === 'pages') file = path.join(PAGES_DIR, rel || 'newtab.html')
-  else if (host === 'newtab') file = NEWTAB_FILE
+  else   if (host === 'newtab') file = NEWTAB_FILE
   else if (host === 'welcome') file = path.join(PAGES_DIR, 'welcome.html')
+  else if (host === 'version') file = path.join(PAGES_DIR, 'about.html')
   else if (/^[a-z0-9-]+$/.test(host)) file = path.join(PAGES_DIR, host + '.html')
   else return null
   const resolved = path.resolve(file)

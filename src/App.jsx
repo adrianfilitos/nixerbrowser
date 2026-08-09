@@ -341,6 +341,44 @@ export default function App() {
     if (url) window.api.createWindow(false, url)
   }
 
+  function navigateTab(id, url) {
+    const el = elsRef.current.get(id)
+    if (el && url) {
+      try { el.loadURL(url) } catch {}
+    }
+  }
+
+  function restoreAllTabs() {
+    while (closedTabsRef.current.length) {
+      const t = closedTabsRef.current.shift()
+      if (t) addTab(t.url, { activate: false })
+    }
+    setClosedCount(0)
+  }
+
+  function reloadAllTabs() {
+    setTabs((prev) => {
+      prev.forEach((t) => {
+        const el = elsRef.current.get(t.id)
+        if (el) { try { el.reload() } catch {} }
+      })
+      return prev
+    })
+  }
+
+  function bookmarkAllTabs() {
+    let n = 0
+    tabs.forEach((t) => {
+      if (t.url && t.url.startsWith('http') && !window.api.isBookmarked) return
+      if (t.url && t.url.startsWith('http')) {
+        window.api.addBookmark({ url: t.url, title: t.title || t.url })
+        n++
+      }
+    })
+    refreshBookmarks()
+    addToast(n + ' pestañas añadidas a marcadores', 'ok')
+  }
+
   function createTabObject() {
     const src = computeSrc('')
     const id = Date.now() + '-' + tabSeq++
@@ -511,6 +549,9 @@ export default function App() {
           if (el) {
             try { el.setAudioMuted(el.isAudioMuted ? !el.isAudioMuted() : true) } catch {}
           }
+        }
+        else if (action === 'bookmark-all') {
+          bookmarkAllTabs()
         }
       }),
     ]
@@ -689,6 +730,9 @@ export default function App() {
           onMoveWindow={moveTabToWindow}
           onNewWindowUrl={openInNewWindow}
           closedCount={closedCount}
+          onRestoreAll={restoreAllTabs}
+          onReloadAll={reloadAllTabs}
+          onNavigateTab={navigateTab}
           onPin={(id) => setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t)))}
           onNewUrl={(url) => addTab(url)}
           onRestore={() => restoreTab()}

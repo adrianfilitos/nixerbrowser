@@ -189,8 +189,17 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
     const raw = value.trim()
     if (!raw) return
     if (aiMode || raw.startsWith('/')) {
-      const prompt = raw.startsWith('/') ? raw.slice(1).trim() : raw
-      if (!prompt) return
+      const promptRaw = raw.startsWith('/') ? raw.slice(1).trim() : raw
+      if (!promptRaw) return
+      let prompt = promptRaw
+      const cm = /^(resumir|resume|traducir|translate|corregir|corrige)\s+(.+)$/i.exec(promptRaw)
+      if (cm) {
+        const cmd = cm[1].toLowerCase()
+        const rest = cm[2]
+        if (cmd === 'resumir' || cmd === 'resume') prompt = 'Resume lo siguiente:\n\n' + rest
+        else if (cmd === 'traducir' || cmd === 'translate') prompt = 'Traduce al español:\n\n' + rest
+        else if (cmd === 'corregir' || cmd === 'corrige') prompt = 'Corrige la gramática y ortografía:\n\n' + rest
+      }
       const userMsg = { role: 'user', content: prompt }
       threadRef.current = [...threadRef.current, userMsg]
       setThread(threadRef.current)
