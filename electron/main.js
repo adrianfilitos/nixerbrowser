@@ -424,7 +424,7 @@ function registerIpc() {
   ipcMain.handle('shields:get', (_e, origin) => {
     const s = store.settings()
     const shields = (s.siteShields && s.siteShields[origin]) || {}
-    const blocked = adblock.stats().blocked[origin] || { ads: 0, scripts: 0 }
+    const blocked = adblock.stats().blocked[origin] || { ads: 0, scripts: 0, trackers: 0 }
     return {
       origin,
       blockAds: shields.blockAds !== undefined ? shields.blockAds : s.blockAds,
@@ -432,6 +432,7 @@ function registerIpc() {
       blockCookies: s.blockThirdPartyCookies,
       ads: blocked.ads || 0,
       scripts: blocked.scripts || 0,
+      trackers: blocked.trackers || 0,
     }
   })
   ipcMain.handle('shields:set', (_e, payload) => {

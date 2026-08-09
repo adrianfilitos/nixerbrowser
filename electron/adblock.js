@@ -5,17 +5,37 @@ const path = require('path')
 const BLOCKLIST_URL = 'https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts'
 const YOYO_URL = 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&mimetype=plaintext'
 
-const URL_RULES = [
-  '/ads/', '/adserver', 'adserver.', 'adsystem', '/pagead/', 'googleadservices', 'googlesyndication',
-  'doubleclick', 'adservice.', 'adnxs', 'adsrvr.', 'criteo.', 'taboola.', 'outbrain.', 'pubmatic',
-  'openx.', 'rubicon', 'casalemedia', 'smartadserver', 'moatads', 'quantserve', 'scorecardresearch',
-  'adform.', 'adroll', 'amazon-adsystem', 'safeframe', 'pixel.', '/pixel', '/beacon', '/impression',
+// Patrones de anuncios / ad-tech (se aplican a subrecursos, no a la página principal)
+const AD_PATTERNS = [
+  '/ads/', '/ads?', '/adserver', 'adserver.', 'adsystem', '/pagead/', 'googleadservices',
+  'googlesyndication', 'doubleclick', 'adservice.', 'adnxs', 'adsrvr.', 'criteo.', 'taboola.',
+  'outbrain.', 'pubmatic', 'openx.', 'rubicon', 'casalemedia', 'smartadserver', 'moatads',
+  'quantserve', 'scorecardresearch', 'adform.', 'adroll', 'amazon-adsystem', 'safeframe',
   '/adclick', '/sponsored', 'advertising.', 'yieldmo', 'zedo.', 'demdex', 'rlcdn', 'tapad.',
   'bluekai', 'exelator', 'contextweb', 'sharethrough', 'spotxchange', 'gumgum', '33across',
-  'bidswitch', 'tribalfusion', '/banner', '/tracking', '/advert', 'ad-serve', 'ads-', 'adtech',
-  'undertone', 'yieldlab', 'medianet', '/doubleclick', 'trackad', 'adx-', '/aniview',
+  'bidswitch', 'tribalfusion', '/banner', '/advert', 'ad-serve', 'ads-', 'adtech', 'undertone',
+  'yieldlab', 'medianet', 'trackad', 'adx-', '/aniview', 'adpushup', 'anyclip', 'adthrive',
+  'mediavine', 'ezoic', 'tapresearch', 'prebid', 'pubnative', 'rtbhouse', 'smadex', 'sovrn',
+  'indexexchange', 'lijit', 'zemanta', 'improvedigital', 'rhythmone', 'conversantmedia',
+  'beachfront', 'emxdgt', 'triplelift', 'ucfunnel', 'verizonmedia', 'yieldbird', 'kixer',
+  'media.net', 'nudatasecurity', 'pavlovads', 'plista', 'stackadapt', 'startappservice',
+  'sulvo', 'unrulymedia', 'videoamp', 'usemax', 'brightcom', 'onetag', 'orcasrv', 'tidaltv',
+  'adserv.', 'adserver', 'adv.', 'ads.', '/ads?', 'pixel.ads', 'adserving',
 ]
 
+// Patrones de rastreo / telemetría / analítica
+const TRACKER_PATTERNS = [
+  '/collect', '/telemetry', '/metrics', '/beacon', '/pixel', '/track', '/tracking', '/event',
+  '/pageview', '/analytics', 'analytics.', '-analytics', 'tracking.', 'statcounter',
+  'hotjar', 'optimizely', 'mouseflow', 'fullstory', 'clarity.ms', 'segment.io', 'amplitude',
+  'mixpanel', 'matomo', 'piwik', 'bugsnag', 'sentry.io', 'newrelic', 'appdynamics',
+  'facebook.com/tr', 'connect.facebook.net', 'static.ads-twitter.com', 'analytics.twitter.com',
+  'ads-twitter.com', 'app-measurement.com', 'firebase', 'crashlytics', 'doubleclick.net/pagead',
+  'gtm.js', 'gtag/js', 'google-analytics.com/analytics.js', 'googletagmanager.com/gtm',
+  'googletagmanager.com/gtag', 'google-analytics.com/collect', '/o/ads',
+]
+
+// Dominios embebidos: anuncios + rastreo + social/telemetría (host exacto / subdominios)
 const EMBEDDED = [
   'doubleclick.net', 'googlesyndication.com', 'google-analytics.com', 'googletagmanager.com',
   'adservice.google.com', 'googleadservices.com', 'googletagservices.com', 'adsrvr.org',
@@ -47,13 +67,27 @@ const EMBEDDED = [
   'smadex.com', 'stackadapt.com', 'startappservice.com', 'sulvo.com', 'unrulymedia.com',
   'usemax.de', 'videoamp.com', 'vtracy.com', 'adthrive.com', 'mediavine.com',
   'ezoic.io', 'tapresearch.com', 'zetaglobal.com',
+  // analítica y telemetría
+  'statcounter.com', 'mouseflow.com', 'fullstory.com', 'segment.com', 'segment.io',
+  'amplitude.com', 'mixpanel.com', 'matomo.org', 'piwik.pro', 'bugsnag.com',
+  'sentry.io', 'newrelic.com', 'clarity.ms', 'app-measurement.com', 'firebaseio.com',
+  'firebaselogging.googleapis.com', 'inappmessaging.googleapis.com', 'appspot.com',
+  'crashlytics.com', 'instana.com', 'dynatrace.com', 'datadoghq.com', 'nr-data.net',
+  'browser.sentry-cdn.com', 'perfops.net', 'speedcurve.com', 'akamai.net/mPulse',
+  // social / widgets de seguimiento
+  'connect.facebook.net', 'static.ads-twitter.com', 'analytics.twitter.com',
+  'ads-twitter.com', 'platform.twitter.com', 'www.googletagmanager.com',
+  'graph.facebook.com', 'facebook.net',
 ]
+
+const BLOCK_TYPES = new Set(['script', 'image', 'xhr', 'fetch', 'media', 'sub_frame', 'websocket', 'beacon', 'font', 'object', 'ping'])
 
 let domains = new Set()
 let suffixes = new Set()
 let cache = { ts: 0, domains: [] }
 let loaded = false
 const blockedCounts = new Map()
+let totalBlocked = 0
 const recent = []
 
 function logFile() {
@@ -62,7 +96,8 @@ function logFile() {
 
 function logBlock(url, type) {
   recent.unshift({ ts: Date.now(), url, type })
-  if (recent.length > 60) recent.pop()
+  if (recent.length > 80) recent.pop()
+  totalBlocked++
   try {
     fs.appendFileSync(logFile(), new Date().toISOString() + ' [' + type + '] ' + url + '\n')
   } catch {}
@@ -77,7 +112,7 @@ function ensureLoaded() {
 
 function addList(list) {
   for (const d of list) {
-    const h = String(d).trim().toLowerCase().replace(/^www\./, '')
+    const h = String(d).trim().toLowerCase().replace(/^www\./, '').replace(/^https?:\/\//, '').split('/')[0]
     if (!h || !h.includes('.') || h.startsWith('#') || h === 'localhost') continue
     domains.add(h)
     suffixes.add('.' + h)
@@ -146,9 +181,9 @@ function isBlocked(host) {
   return false
 }
 
-function matchesUrlRules(url) {
+function urlMatches(patterns, url) {
   const u = url.toLowerCase()
-  for (const r of URL_RULES) {
+  for (const r of patterns) {
     if (u.includes(r)) return true
   }
   return false
@@ -173,7 +208,7 @@ function isThirdParty(details) {
 
 function bump(origin, type) {
   if (!origin) return
-  const c = blockedCounts.get(origin) || { ads: 0, scripts: 0 }
+  const c = blockedCounts.get(origin) || { ads: 0, scripts: 0, trackers: 0 }
   c[type] = (c[type] || 0) + 1
   blockedCounts.set(origin, c)
 }
@@ -188,13 +223,33 @@ function init(sessionRef, getState) {
     try {
       const url = new URL(details.url)
       const host = url.hostname.toLowerCase()
+      const origin = originOf(details.url)
+      const type = details.resourceType || 'other'
+
+      // 1) Host en la lista (bloquea TODO, incluida la página principal)
       if (st.blockAds && isBlocked(host)) {
-        bump(originOf(details.url), 'ads')
+        bump(origin, 'ads')
         logBlock(details.url, 'anuncio')
         return callback({ cancel: true })
       }
-      if (st.blockScripts && details.resourceType === 'script') {
-        bump(originOf(details.url), 'scripts')
+
+      // 2) Patrones de rastreo en subrecursos
+      if (st.blockAds && type !== 'main_frame' && BLOCK_TYPES.has(type) && urlMatches(TRACKER_PATTERNS, details.url)) {
+        bump(origin, 'trackers')
+        logBlock(details.url, 'rastreador')
+        return callback({ cancel: true })
+      }
+
+      // 3) Patrones de anuncios en subrecursos
+      if (st.blockAds && type !== 'main_frame' && BLOCK_TYPES.has(type) && urlMatches(AD_PATTERNS, details.url)) {
+        bump(origin, type === 'script' ? 'scripts' : 'ads')
+        logBlock(details.url, 'anuncio')
+        return callback({ cancel: true })
+      }
+
+      // 4) Bloqueo de scripts (ajuste manual)
+      if (st.blockScripts && type === 'script') {
+        bump(origin, 'scripts')
         logBlock(details.url, 'script')
         return callback({ cancel: true })
       }
@@ -229,10 +284,23 @@ function init(sessionRef, getState) {
 
 function stats() {
   ensureLoaded()
+  const byOrigin = Object.fromEntries(blockedCounts)
+  let ads = 0
+  let scripts = 0
+  let trackers = 0
+  for (const c of blockedCounts.values()) {
+    ads += c.ads || 0
+    scripts += c.scripts || 0
+    trackers += c.trackers || 0
+  }
   return {
     count: domains.size,
     updated: cache.ts,
-    blocked: Object.fromEntries(blockedCounts),
+    total: totalBlocked,
+    ads,
+    scripts,
+    trackers,
+    blocked: byOrigin,
   }
 }
 

@@ -216,6 +216,7 @@
             <div class="field"><div class="meta"><div class="label">Ofrecer guardar contraseñas</div><div class="desc">Preguntar al iniciar sesión si se quiere guardar</div></div><div class="control"><label class="switch"><input type="checkbox" id="offerPasswordSave" /><span class="track"><span class="thumb"></span></span></label></div></div>
             <div class="field"><div class="meta"><div class="label">Bloquear ventanas emergentes</div><div class="desc">Impedir que los sitios abran ventanas emergentes</div></div><div class="control"><label class="switch"><input type="checkbox" id="blockPopups" /><span class="track"><span class="thumb"></span></span></label></div></div>
             <div class="field"><div class="meta"><div class="label">Lista de bloqueo</div><div class="desc"><span id="adCount">…</span> · lista actualizable de publicidad y rastreo</div></div><div class="control"><button class="btn" id="refreshAds">Actualizar lista</button></div></div>
+            <div class="field"><div class="meta"><div class="label">Bloqueado por el navegador</div><div class="desc"><span id="adTotal">…</span></div></div></div>
             <div class="field"><div class="meta"><div class="label">Borrar datos de navegación</div>
               <div class="clear-row" style="margin-top:8px">
                 <label><input type="checkbox" id="ddCache" /> Caché</label>
@@ -540,6 +541,12 @@
       function showAdStats() {
         browserAPI.adblock.stats().then(function (s) {
           document.getElementById('adCount').textContent = (s.count || 0) + ' dominios' + (s.updated ? ' · ' + new Date(s.updated).toLocaleDateString('es') : '')
+          var parts = []
+          if (s.total) parts.push((s.total || 0) + ' en total')
+          if (s.ads) parts.push((s.ads || 0) + ' anuncios')
+          if (s.trackers) parts.push((s.trackers || 0) + ' rastreadores')
+          if (s.scripts) parts.push((s.scripts || 0) + ' scripts')
+          document.getElementById('adTotal').textContent = parts.length ? parts.join(' · ') : 'Nada bloqueado aún'
         })
       }
 
