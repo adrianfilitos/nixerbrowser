@@ -93,7 +93,7 @@
       <h1>Ajustes</h1>
       <div class="search">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-        <input id="search" type="text" placeholder="Buscar en los ajustes�?�" autocomplete="off" spellcheck="false" />
+        <input id="search" type="text" placeholder="Buscar en los ajustes…" autocomplete="off" spellcheck="false" />
       </div>
       <button class="btn ghost" id="resetAll">Restablecer ajustes</button>
     </header>
@@ -197,7 +197,7 @@
             <div id="shortcuts"></div>
             <div class="add-shortcut">
               <input type="text" id="scTitle" placeholder="Nombre (ej. Gmail)" />
-              <input type="url" id="scUrl" placeholder="https://�?�" />
+              <input type="url" id="scUrl" placeholder="https://…" />
               <input type="color" id="scColor" value="#6c7bff" title="Color" />
               <button class="btn" id="addShortcut">Añadir</button>
             </div>
@@ -214,7 +214,7 @@
             <div id="customEngines"></div>
             <div class="add-engine">
               <input type="text" id="newName" placeholder="Nombre (ej. Startpage)" />
-              <input type="text" id="newTpl" placeholder="URL con {q} (ej. https://�?�/search?query={q})" />
+              <input type="text" id="newTpl" placeholder="URL con {q} (ej. https://…/search?query={q})" />
               <button class="btn" id="addEngine">Añadir</button>
             </div>
           </div>
@@ -225,7 +225,7 @@
           <div class="card">
             <div class="field">
               <div class="meta"><div class="label">Página de inicio</div><div class="desc">Se abre con el botón de inicio y como nueva pestaña</div></div>
-              <div class="control"><input type="url" id="homePage" placeholder="https://�?�" /></div>
+              <div class="control"><input type="url" id="homePage" placeholder="https://…" /></div>
             </div>
             <div class="field">
               <div class="meta"><div class="label">Al iniciar</div><div class="desc">Qué se muestra al abrir el navegador</div></div>
@@ -263,7 +263,7 @@
               <div class="control"><label class="switch"><input type="checkbox" id="sendDnt" /><span class="track"><span class="thumb"></span></span></label></div>
             </div>
             <div class="field">
-              <div class="meta"><div class="label">Lista de bloqueo</div><div class="desc"><span id="adCount">�?�</span> · lista actualizable de publicidad y rastreo</div></div>
+              <div class="meta"><div class="label">Lista de bloqueo</div><div class="desc"><span id="adCount">…</span> · lista actualizable de publicidad y rastreo</div></div>
               <div class="control"><button class="btn" id="refreshAds">Actualizar lista</button></div>
             </div>
             <div class="field">
@@ -306,7 +306,7 @@
           <h2>Sistema</h2>
           <div class="card">
             <div class="field">
-              <div class="meta"><div class="label">Navegador predeterminado</div><div class="desc"><span id="defaultBrowserStatus">�?�</span></div></div>
+              <div class="meta"><div class="label">Navegador predeterminado</div><div class="desc"><span id="defaultBrowserStatus">…</span></div></div>
               <div class="control"><button class="btn" id="setDefaultBrowser">Establecer como predeterminado</button></div>
             </div>
             <div class="field">
@@ -348,7 +348,7 @@
           <h2>IA</h2>
           <div class="card">
             <div class="subtle">
-              Asistente en la barra de direcciones (botón �o� o escribir «/») y en el chat (Ctrl+Alt+A).
+              Asistente en la barra de direcciones (botón ✦ o escribir «/») y en el chat (Ctrl+Alt+A).
               Funciona con cualquier API compatible con OpenAI (OpenAI, OpenRouter, Ollama en <code>http://localhost:11434/v1</code>, etc.).
             </div>
             <div class="field">
@@ -358,7 +358,7 @@
             <div class="field">
               <div class="meta"><div class="label">Clave de API</div><div class="desc">Se guarda solo en este equipo</div></div>
               <div class="control">
-                <input type="password" id="aiApiKey" placeholder="sk-�?�" style="min-width:230px" />
+                <input type="password" id="aiApiKey" placeholder="sk-…" style="min-width:230px" />
                 <button class="eye" id="aiKeyToggle" title="Mostrar / ocultar clave">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
@@ -525,12 +525,12 @@
           row.className = 'sc-row'
           row.innerHTML =
             '<span class="sc-dot"></span>' +
-            '<button class="sc-mv" title="Subir">�-�</button>' +
-            '<button class="sc-mv" title="Bajar">�-�</button>' +
+            '<button class="sc-mv" title="Subir">▲</button>' +
+            '<button class="sc-mv" title="Bajar">▼</button>' +
             '<input type="text" placeholder="Nombre" />' +
-            '<input type="url" placeholder="https://�?�" />' +
+            '<input type="url" placeholder="https://…" />' +
             '<input type="color" />' +
-            '<button class="sc-del" title="Quitar">�o.</button>'
+            '<button class="sc-del" title="Quitar">✕</button>'
           row.querySelector('.sc-dot').style.background = sc.color || '#6c7bff'
           var inputs = row.querySelectorAll('input')
           inputs[0].value = sc.title
@@ -736,7 +736,7 @@
         showAdStats()
         document.getElementById('refreshAds').onclick = async function () {
           this.disabled = true
-          this.textContent = 'Actualizando�?�'
+          this.textContent = 'Actualizando…'
           await browserAPI.adblock.refresh()
           this.disabled = false
           this.textContent = 'Actualizar lista'
@@ -764,7 +764,7 @@
         document.getElementById('testAi').onclick = async function () {
           var btn = this
           var res = document.getElementById('testResult')
-          res.textContent = 'Probando�?�'
+          res.textContent = 'Probando…'
           btn.disabled = true
           var r = await browserAPI.ai.chat([{ role: 'user', content: 'Di exactamente: OK' }])
           btn.disabled = false
