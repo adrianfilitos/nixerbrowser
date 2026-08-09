@@ -40,6 +40,15 @@ const PAGE_TITLES = {
 
 let tabSeq = 1
 
+function isLoopback(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    return host === 'localhost' || host === '[::1]' || host === '::1' || host.startsWith('127.')
+  } catch {
+    return false
+  }
+}
+
 export default function App() {
   const [tabs, setTabs] = useState([])
   const [navState, setNavState] = useState({ canGoBack: false, canGoForward: false, isLoading: false })
@@ -149,7 +158,7 @@ export default function App() {
       const url = e.url
       const internal = internalForSrc(url)
       update({ url: internal ? '' : url, internal })
-      if (!internal && url.startsWith('http') && !incognitoRef.current) {
+      if (!internal && url.startsWith('http') && !isLoopback(url) && !incognitoRef.current) {
         const t = tabsRef.current.find((x) => x.id === id)
         window.api.addHistory({ url, title: (t && t.title) || url })
       }
@@ -345,7 +354,7 @@ export default function App() {
     clearTimeout(sessionTimerRef.current)
     sessionTimerRef.current = setTimeout(() => {
       setTabs((prev) => {
-        window.api.saveSession(prev.filter((t) => t.url && t.url.startsWith('http')).map((t) => ({ url: t.url, pinned: !!t.pinned })))
+        window.api.saveSession(prev.filter((t) => t.url && t.url.startsWith('http') && !isLoopback(t.url)).map((t) => ({ url: t.url, pinned: !!t.pinned })))
         return prev
       })
     }, 1500)

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Menu, session, shell, dialog, webContents, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
 const crypto = require('crypto')
 const { execFile } = require('child_process')
 const AdmZip = require('adm-zip')
@@ -11,6 +12,9 @@ app.commandLine.appendSwitch('disable-features', 'OptimizationHints,MediaRouter,
 
 app.setName('Nixer Browser')
 app.setAppUserModelId('com.nixer.browser')
+if (process.env.SMOKE === '1' && !process.env.NIXER_USER_DATA) {
+  process.env.NIXER_USER_DATA = path.join(os.tmpdir(), 'nixer-smoke-profile')
+}
 app.setPath('userData', process.env.NIXER_USER_DATA || path.join(app.getPath('appData'), 'navegador'))
 
 const store = require('./store')
@@ -1326,7 +1330,7 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
   setInterval(gcHiddenWebviews, 45000)
-  const startUrl = process.argv.find((a) => /^https?:\/\//i.test(a))
+  const startUrl = process.argv.find((a) => /^https?:\/\//i.test(a) && !store.isLoopbackUrl(a))
   if (startUrl) {
     setTimeout(() => {
       const c = currentCtx()

@@ -314,9 +314,18 @@ function globMatch(pattern, url) {
 function saveSession(tabs) {
   state.session = tabs
     .map((t) => ({ url: t.url, pinned: !!t.pinned }))
-    .filter((t) => t.url && t.url.startsWith('http'))
+    .filter((t) => t.url && t.url.startsWith('http') && !isLoopbackUrl(t.url))
     .slice(0, 30)
   persist('session')
+}
+
+function isLoopbackUrl(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    return host === 'localhost' || host === '[::1]' || host === '::1' || host.startsWith('127.')
+  } catch {
+    return false
+  }
 }
 
 module.exports = {
@@ -348,6 +357,7 @@ module.exports = {
   clearDownloads,
   session,
   saveSession,
+  isLoopbackUrl,
   listPasswords,
   addPassword,
   removePassword,
