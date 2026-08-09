@@ -10,6 +10,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
   const [renameVal, setRenameVal] = useState('')
   const [filter, setFilter] = useState('')
   const [dockTarget, setDockTarget] = useState(false)
+  const [draggingId, setDraggingId] = useState(null)
   const dragTabRef = useRef(null)
   const dragMovedRef = useRef(false)
   const colorSeq = useRef(0)
@@ -76,6 +77,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
         const dy = e.clientY - dragStartRef.current.y
         if (Math.hypot(dx, dy) < 5) return
         dragMovedRef.current = true
+        setDraggingId(t.id)
       }
       if (window.api.dragMove) window.api.dragMove(e.screenX, e.screenY)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
@@ -93,6 +95,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       rafRef.current = null
       dragTabRef.current = null
+      setDraggingId(null)
       if (dragMovedRef.current) {
         suppressClickRef.current = true
         if (window.api.dragDrop) window.api.dragDrop(e.screenX, e.screenY)
@@ -105,6 +108,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
       if (!dragTabRef.current) return
       dragTabRef.current = null
       dragMovedRef.current = false
+      setDraggingId(null)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       rafRef.current = null
       if (window.api.dragCancel) window.api.dragCancel()
@@ -199,7 +203,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
           <div
             key={t.id}
             data-id={t.id}
-            className={'tab' + (t.active ? ' active' : '') + (t.pinned ? ' pinned' : '')}
+            className={'tab' + (t.active ? ' active' : '') + (t.pinned ? ' pinned' : '') + (draggingId === t.id ? ' dragging' : '')}
             onDragOver={onTabDragOver}
             onClick={(e) => {
               if (suppressClickRef.current) { suppressClickRef.current = false; e.preventDefault(); return }

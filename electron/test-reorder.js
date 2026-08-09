@@ -34,14 +34,16 @@ app.whenReady().then(async () => {
     await delay(20)
   }
   await delay(400)
+  const draggingDuring = await ui.executeJavaScript(`!!document.querySelector('.tab.dragging')`)
   ui.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
   await delay(800)
 
   const after = await wto(order(), 4000, 'after')
+  const draggingAfter = await ui.executeJavaScript(`!!document.querySelector('.tab.dragging')`)
   const active = await ui.executeJavaScript(`document.querySelector('.tab.active') ? document.querySelector('.tab.active').dataset.id : null`)
 
-  console.log('REORDER:', JSON.stringify({ before, after, from, to, active }))
-  const ok = JSON.stringify(before) !== JSON.stringify(after)
+  console.log('REORDER:', JSON.stringify({ before, after, from, to, active, draggingDuring, draggingAfter }))
+  const ok = JSON.stringify(before) !== JSON.stringify(after) && draggingDuring === true && draggingAfter === false
   console.log('RESULT:', ok ? 'REORDER_OK' : 'REORDER_FAIL')
   win.close()
   setTimeout(() => app.exit(ok ? 0 : 1), 300)
