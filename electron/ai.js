@@ -3,7 +3,7 @@ const store = require('./store')
 async function chat(messages) {
   const s = store.settings()
   const base = (s.aiBaseUrl || '').trim()
-  const key = (s.aiApiKey || '').trim()
+  const key = store.decryptSecret((s.aiApiKey || '').trim())
   const model = (s.aiModel || 'gpt-4o-mini').trim()
   if (!base || !key) {
     return { error: 'Configura el proveedor de IA y la clave en Ajustes (sección IA).' }

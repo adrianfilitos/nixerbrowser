@@ -163,11 +163,17 @@ function broadcastDownloads() {
 }
 
 function broadcastSettings() {
-  const s = store.settings()
+  const s = settingsForUi()
   for (const ctx of windows.values()) {
     const t = ui(ctx)
     if (t && !t.isDestroyed()) t.send('settings-updated', s)
   }
+}
+
+function settingsForUi() {
+  const s = { ...store.settings() }
+  s.aiApiKey = store.decryptSecret(s.aiApiKey)
+  return s
 }
 
 function gcHiddenWebviews() {
@@ -1070,9 +1076,12 @@ function registerIpc() {
   ipcMain.handle('history:remove', (_e, url) => store.removeHistory(url))
   ipcMain.handle('downloads:list', () => store.downloads())
   ipcMain.handle('downloads:clear', () => { store.clearDownloads(); broadcastDownloads() })
-  ipcMain.handle('settings:get', () => store.settings())
+  ipcMain.handle('settings:get', () => settingsForUi())
   ipcMain.handle('settings:defaults', () => store.settingsDefaults())
   ipcMain.handle('settings:set', (_e, patch) => {
+    if (patch && typeof patch.aiApiKey === 'string' && patch.aiApiKey) {
+      patch = { ...patch, aiApiKey: store.encryptSecret(patch.aiApiKey) }
+    }
     store.setSettings(patch)
     if (patch.downloadPath !== undefined) {
       try { session.defaultSession.setDownloadPath(patch.downloadPath || app.getPath('downloads')) } catch {}
@@ -1215,6 +1224,13 @@ app.on('web-contents-created', (_e, wc) => {
     if (isMainFrame && url && /^https?:/.test(url) && store.settings().safeBrowsing !== false) checkUrl(url, wc)
   })
   wc.on('will-navigate', (e, url) => {
+    let proto = ''
+    try { proto = new URL(url).protocol } catch { e.preventDefault(); return }
+    const ALLOWED = ['http:', 'https:', 'nixer:', 'chrome-extension:', 'about:', 'data:']
+    if (!ALLOWED.includes(proto)) {
+      e.preventDefault()
+      return
+    }
     if (store.settings().safeBrowsing === false) return
     const host = sbHost(url)
     const cached = host && SB_CACHE.get(host)

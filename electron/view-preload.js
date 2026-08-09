@@ -62,7 +62,10 @@ document.addEventListener('DOMContentLoaded', () => {
   injectContentScripts()
 })
 
-contextBridge.exposeInMainWorld('browserAPI', {
+const IS_INTERNAL_PAGE = /^(nixer:|file:)/.test(location.href)
+
+if (IS_INTERNAL_PAGE) {
+  contextBridge.exposeInMainWorld('browserAPI', {
   history: {
     list: (q) => ipcRenderer.invoke('history:list', q),
     clear: () => ipcRenderer.invoke('history:clear'),
@@ -136,4 +139,5 @@ contextBridge.exposeInMainWorld('browserAPI', {
   },
   openTab: (url) => ipcRenderer.send('create-tab', url),
   onDownloads: (cb) => ipcRenderer.on('downloads-updated', (_e, d) => cb(d)),
-})
+  })
+}

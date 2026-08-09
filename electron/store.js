@@ -1,4 +1,4 @@
-const { app } = require('electron')
+const { app, safeStorage } = require('electron')
 const fs = require('fs')
 const path = require('path')
 
@@ -227,12 +227,31 @@ function session() {
   return state.session
 }
 
+function encryptSecret(t) {
+  if (!t) return t
+  try {
+    if (safeStorage.isEncryptionAvailable()) return 'e1:' + safeStorage.encryptString(String(t)).toString('base64')
+  } catch {}
+  return t
+}
+
+function decryptSecret(t) {
+  if (typeof t === 'string' && t.startsWith('e1:')) {
+    try {
+      return safeStorage.decryptString(Buffer.from(t.slice(3), 'base64'))
+    } catch {
+      return ''
+    }
+  }
+  return t
+}
+
 function listPasswords() {
-  return state.passwords
+  return state.passwords.map((p) => ({ ...p, password: decryptSecret(p.password) }))
 }
 
 function addPassword(p) {
-  const rec = { id: Date.now() + '-' + Math.floor(Math.random() * 1e4), origin: p.origin, username: p.username || '', password: p.password || '', ts: Date.now() }
+  const rec = { id: Date.now() + '-' + Math.floor(Math.random() * 1e4), origin: p.origin, username: p.username || '', password: encryptSecret(p.password || ''), ts: Date.now() }
   state.passwords.unshift(rec)
   persist('passwords')
   return rec
@@ -249,7 +268,7 @@ function hasPassword(origin) {
 
 function getPassword(origin) {
   const p = state.passwords.find((x) => x.origin === origin)
-  return p ? { username: p.username, password: p.password } : null
+  return p ? { username: p.username, password: decryptSecret(p.password) } : null
 }
 
 function listExtensions() {
@@ -334,6 +353,8 @@ module.exports = {
   removePassword,
   hasPassword,
   getPassword,
+  encryptSecret,
+  decryptSecret,
   listExtensions,
   addExtension,
   removeExtension,
