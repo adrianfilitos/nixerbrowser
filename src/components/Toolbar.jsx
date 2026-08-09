@@ -22,9 +22,12 @@ export default function Toolbar({
   profileColor,
   onNewTab,
   incognito,
+  settings,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
+  const show = (k, def) => (settings && settings[k] !== undefined ? settings[k] : def)
+  const homePage = (settings && settings.homePage) || 'nixer://newtab'
 
   useEffect(() => {
     onOverlayChange(menuOpen)
@@ -58,6 +61,14 @@ export default function Toolbar({
   return (
     <div className="toolbar">
       <NavButtons navState={navState} onNavAction={onNavAction} />
+      {show('showHomeButton', true) && (
+        <button className="tool-btn" title="Inicio (Alt+Home)" onClick={() => onNavigate(homePage)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 10.5 12 3l9 7.5" />
+            <path d="M5 9.5V21h14V9.5" />
+          </svg>
+        </button>
+      )}
       <AddressBar
         url={activeTab ? activeTab.url : ''}
         internalKey={activeTab ? activeTab.internal : null}
@@ -78,15 +89,17 @@ export default function Toolbar({
           <path d="M19 21l-7-4.5L5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
         </svg>
       </button>
-      <button className="tool-btn" title="Descargas (Ctrl+J)" onClick={() => onOpenPage('downloads')}>
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <path d="M7 10l5 5 5-5" />
-          <path d="M12 15V3" />
-        </svg>
-        {inProgressCount > 0 && <span className="badge">{inProgressCount}</span>}
-      </button>
-      {incognito && (
+      {show('showDownloadsButton', true) && (
+        <button className="tool-btn" title="Descargas (Ctrl+J)" onClick={() => onOpenPage('downloads')}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <path d="M7 10l5 5 5-5" />
+            <path d="M12 15V3" />
+          </svg>
+          {inProgressCount > 0 && <span className="badge">{inProgressCount}</span>}
+        </button>
+      )}
+      {incognito && show('showIncognitoBadge', true) && (
         <span className="incognito-chip" title="Estás navegando de incógnito: sin historial, sin sesión guardada ni contraseñas">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
@@ -96,7 +109,8 @@ export default function Toolbar({
         </span>
       )}
       <browser-action-list className="ext-actions" />
-      <ExtensionsMenu onOpenPage={onOpenPage} />
+      {show('showExtensionsButton', true) && <ExtensionsMenu onOpenPage={onOpenPage} />}
+      {show('showMenuButton', true) && (
       <div className="menu-wrap" ref={menuRef}>
         <button className="menu-btn" title="Menú" onClick={() => setMenuOpen((o) => !o)}>
           <span className="menu-avatar" style={{ background: profileColor || 'var(--accent)' }}>
@@ -144,6 +158,7 @@ export default function Toolbar({
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }

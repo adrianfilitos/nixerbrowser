@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, session, shell, dialog, webContents, net } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, session, shell, dialog, webContents, net, Tray, nativeImage, Notification } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -21,6 +21,13 @@ const store = require('./store')
 const adblock = require('./adblock')
 const ai = require('./ai')
 const nixer = require('./nixer')
+
+if (store.settings().hardwareAcceleration === false) {
+  app.disableHardwareAcceleration()
+}
+if (store.settings().gpuRasterization === false) {
+  app.commandLine.appendSwitch('disable-gpu-rasterization')
+}
 
 nixer.registerScheme()
 
@@ -55,6 +62,29 @@ const windows = new Map()
 let nextWindowId = 1
 let extEngine = null
 const pendingExtCreate = []
+let tray = null
+let quitting = false
+
+app.on('before-quit', () => { quitting = true })
+
+function setupTray() {
+  if (tray) return
+  try {
+    let icon = nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.png'))
+    if (icon.isEmpty()) icon = nativeImage.createEmpty()
+    tray = new Tray(icon.resize({ width: 16, height: 16 }))
+    tray.setToolTip('Nixer Browser')
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: 'Abrir Nixer Browser', click: () => { BrowserWindow.getAllWindows().forEach((w) => { if (w.isMinimized()) w.restore(); w.show(); w.focus() }) } },
+      { type: 'separator' },
+      { label: 'Salir', click: () => { quitting = true; app.quit() } },
+    ]))
+  } catch {}
+}
+
+function syncLoginItem() {
+  try { app.setLoginItemSettings({ openAtLogin: !!store.settings().launchAtStartup }) } catch {}
+}
 
 const SB_CACHE = new Map() // host -> { bad, ts }
 const SB_TTL = 6 * 3600 * 1000
@@ -326,11 +356,21 @@ function createWindow({ incognito = false } = {}) {
     }
   })
   win.webContents.on('did-finish-load', () => {
-    if (!win.isDestroyed() && process.env.SMOKE !== '1') win.show()
+    if (!win.isDestroyed() && process.env.SMOKE !== '1') {
+      win.show()
+      if (store.settings().startMinimized) win.minimize()
+    }
   })
 
   win.on('maximize', () => { const t = ui(ctx); if (t && !t.isDestroyed()) t.send('win-maximized', true) })
   win.on('unmaximize', () => { const t = ui(ctx); if (t && !t.isDestroyed()) t.send('win-maximized', false) })
+  win.on('close', (e) => {
+    if (!incognito && store.settings().minimizeToTray && !quitting) {
+      e.preventDefault()
+      win.hide()
+      setupTray()
+    }
+  })
   win.on('closed', () => {
     windows.delete(win)
     if (incognito) {
@@ -684,6 +724,11 @@ function initDownloads() {
     if (forced) {
       item.setSavePath(forced)
       pendingSaveUrls.delete(url)
+    } else if (store.settings().askDownloadLocation) {
+      const win = BrowserWindow.getFocusedWindow()
+      const opts = { defaultPath: path.join(app.getPath('downloads'), item.getFilename()), filters: [{ name: 'Archivo', extensions: ['*'] }] }
+      const res = dialog.showSaveDialogSync(win, opts)
+      if (res && res.filePath) item.setSavePath(res.filePath)
     }
     const rec = {
       id: item.getURL(),
@@ -705,6 +750,17 @@ function initDownloads() {
       rec.state = state === 'completed' ? 'completed' : 'cancelled'
       rec.path = item.getSavePath()
       broadcastDownloads()
+      if (state === 'completed') {
+        if (store.settings().openFolderWhenDone) {
+          try { shell.showItemInFolder(item.getSavePath()) } catch {}
+        }
+        if (store.settings().showDownloadNotifications) {
+          try {
+            const n = new Notification({ title: 'Descarga completada', body: item.getFilename() })
+            n.show()
+          } catch {}
+        }
+      }
     })
   })
 }
@@ -848,15 +904,15 @@ function registerIpc() {
 
   ipcMain.on('login-submit', (e, cred) => {
     const c = ctxFor(e)
-    if (!c || c.incognito) return
+    if (!c || c.incognito || !store.settings().offerPasswordSave) return
     const target = c && ui(c)
     if (target && cred && cred.origin && !store.hasPassword(cred.origin)) {
       target.send('save-password-prompt', cred)
     }
   })
-  ipcMain.on('password-save', (e, cred) => { const c = ctxFor(e); if (cred && (!c || !c.incognito)) store.addPassword(cred) })
+  ipcMain.on('password-save', (e, cred) => { const c = ctxFor(e); if (cred && (!c || !c.incognito) && store.settings().offerPasswordSave) store.addPassword(cred) })
   ipcMain.on('autofill-request', (e, payload) => {
-    const cred = payload && payload.origin ? store.getPassword(payload.origin) : null
+    const cred = payload && payload.origin && store.settings().autofillEnabled ? store.getPassword(payload.origin) : null
     e.sender.send('autofill-response', cred)
   })
   ipcMain.on('autofill-form', (e) => {
@@ -1257,6 +1313,7 @@ app.on('web-contents-created', (_e, wc) => {
     }
   })
   wc.setWindowOpenHandler(({ url }) => {
+    if (store.settings().blockPopups) return { action: 'deny' }
     const c = ctxForWc(wc)
     if (c && url) sendUi(c, 'open-tab', url)
     return { action: 'deny' }
@@ -1304,6 +1361,10 @@ app.whenReady().then(() => {
   }
   session.defaultSession.setUserAgent(ua)
   session.fromPartition(PRIVATE_PARTITION).setUserAgent(ua)
+  const ap = store.settings().autoplayPolicy
+  try { session.defaultSession.setAutoplayPolicy(ap) } catch {}
+  try { session.fromPartition(PRIVATE_PARTITION).setAutoplayPolicy(ap) } catch {}
+  syncLoginItem()
   for (const ses of [session.defaultSession, session.fromPartition(PRIVATE_PARTITION)]) {
     ses.webRequest.onBeforeSendHeaders({ urls: ['*://chromewebstore.google.com/*'] }, (details, cb) => {
       cb({ requestHeaders: Object.assign({}, details.requestHeaders, CHROME_HINTS) })

@@ -213,7 +213,7 @@ export default function App() {
       group: null,
     }
     setTabs((prev) => prev.map((t) => ({ ...t, active: false })).concat(tab))
-    requestAnimationFrame(() => activate(id))
+    if (opts.activate !== false) requestAnimationFrame(() => activate(id))
     scheduleSessionSave()
     return id
   }
@@ -242,6 +242,10 @@ export default function App() {
     setTabs((prev) => {
       const next = prev.filter((x) => x.id !== id)
       if (next.length === 0) {
+        if (settingsRef.current && settingsRef.current.lastTabCloseAction === 'closeWindow') {
+          window.api.close()
+          return prev
+        }
         const fresh = createTabObject()
         return [fresh]
       }
@@ -255,10 +259,17 @@ export default function App() {
   }
 
   function closeAllTabs() {
+    if (settingsRef.current && settingsRef.current.confirmCloseMultiple !== false) {
+      if (!window.confirm('¿Cerrar todas las pestañas?')) return
+    }
     tabs.forEach((t) => {
       if (t.url && t.url.startsWith('http')) closedTabsRef.current.unshift({ url: t.url, title: t.title })
     })
     if (closedTabsRef.current.length > 50) closedTabsRef.current.length = 50
+    if (settingsRef.current && settingsRef.current.lastTabCloseAction === 'closeWindow') {
+      window.api.close()
+      return
+    }
     setTabs([createTabObject()])
     scheduleSessionSave()
   }
@@ -399,7 +410,7 @@ export default function App() {
       window.api.onSavePasswordPrompt((cred) => setSavePrompt(cred)),
       window.api.onUi((action, data) => {
         if (action === 'new-tab') addTab()
-        else if (action === 'open-tab') addTab(data)
+        else if (action === 'open-tab') addTab(data, { activate: !(settingsRef.current && settingsRef.current.openLinksInBackground) })
         else if (action === 'close-tab') closeTab(activeTab ? activeTab.id : null)
         else if (action === 'restore-tab') restoreTab()
         else if (action === 'cycle-tab') cycleTab(data)
@@ -438,15 +449,26 @@ export default function App() {
 
   useEffect(() => {
     const apply = () => {
-      const theme = (settings && settings.theme) || 'dark'
+      const s = settings || {}
+      const theme = s.theme || 'dark'
       const resolved = theme === 'system'
         ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
         : theme
-      document.documentElement.dataset.theme = resolved
-      const accent = (settings && settings.accentColor) || '#6c7bff'
-      document.documentElement.style.setProperty('--accent', accent)
-      document.documentElement.style.setProperty('--accent-2', accent)
-      document.documentElement.classList.toggle('compact', !!(settings && settings.compact))
+      const root = document.documentElement
+      root.dataset.theme = resolved
+      const accent = s.accentColor || '#6c7bff'
+      root.style.setProperty('--accent', accent)
+      root.style.setProperty('--accent-2', accent)
+      root.classList.toggle('compact', !!s.compact)
+      root.classList.toggle('reduce-motion', s.reduceMotion === true || s.animations === false)
+      root.classList.toggle('high-contrast', !!s.highContrast)
+      root.classList.toggle('tabs-bottom', s.tabStripPosition === 'bottom')
+      root.classList.toggle('tabs-square', s.tabShape === 'square')
+      root.style.setProperty('--ui-font-scale', (s.uiFontScale || 100) / 100)
+      root.style.setProperty('--toolbar-font-size', (s.toolbarFontSize || 13) + 'px')
+      root.style.setProperty('--tab-min-width', (s.tabMinWidth || 120) + 'px')
+      if (s.uiBackground) root.style.setProperty('--bg0', s.uiBackground)
+      else root.style.removeProperty('--bg0')
     }
     apply()
     const mq = window.matchMedia('(prefers-color-scheme: light)')
@@ -632,6 +654,7 @@ export default function App() {
           profileName={settings ? settings.profileName : ''}
           profileColor={settings ? settings.profileColor : ''}
           incognito={incognito}
+          settings={settings}
           onNewTab={() => addTab()}
         />
       </div>

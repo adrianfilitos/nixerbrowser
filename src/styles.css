@@ -69,6 +69,62 @@ body {
   flex: 0 0 auto;
   position: relative;
   z-index: 5;
+  display: flex;
+  flex-direction: column;
+}
+
+:root { --ui-font-scale: 1; --toolbar-font-size: 13px; --tab-min-width: 120px; }
+
+:root.tabs-bottom .tab-strip { order: 3; }
+
+:root.tabs-square .tab,
+:root.tabs-square .new-tab,
+:root.tabs-square .tab-manage { border-radius: 0; }
+
+:root.tabs-square .tab-group-stripe { border-radius: 0; }
+
+:root.reduce-motion *,
+:root.reduce-motion *::before,
+:root.reduce-motion *::after {
+  transition: none !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+}
+
+:root.high-contrast {
+  --bg0: #000;
+  --bg1: #0a0a0a;
+  --bg2: #111;
+  --bg3: #161616;
+  --bg4: #222;
+  --border: #555;
+  --text: #fff;
+  --text-dim: #ddd;
+  --text-faint: #aaa;
+  --pop-bg: #111;
+}
+
+:root.high-contrast[data-theme="light"] {
+  --bg0: #fff;
+  --bg1: #fff;
+  --bg2: #f2f2f2;
+  --bg3: #e6e6e6;
+  --bg4: #dcdcdc;
+  --border: #888;
+  --text: #000;
+  --text-dim: #222;
+  --text-faint: #555;
+  --pop-bg: #fff;
+}
+
+.toolbar,
+.tab-strip,
+.bookmarks-bar {
+  font-size: calc(var(--toolbar-font-size) * var(--ui-font-scale));
+}
+
+.tab {
+  min-width: var(--tab-min-width);
 }
 
 .page-container {

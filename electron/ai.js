@@ -5,6 +5,8 @@ async function chat(messages) {
   const base = (s.aiBaseUrl || '').trim()
   const key = store.decryptSecret((s.aiApiKey || '').trim())
   const model = (s.aiModel || 'gpt-4o-mini').trim()
+  const temperature = s.aiTemperature !== undefined ? s.aiTemperature : 0.7
+  const maxTokens = s.aiMaxTokens || 1000
   if (!base || !key) {
     return { error: 'Configura el proveedor de IA y la clave en Ajustes (sección IA).' }
   }
@@ -16,7 +18,7 @@ async function chat(messages) {
         'Content-Type': 'application/json',
         Authorization: 'Bearer ' + key,
       },
-      body: JSON.stringify({ model, messages, max_tokens: 1000 }),
+      body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature }),
       signal: AbortSignal.timeout(60000),
     })
     if (!res.ok) {
