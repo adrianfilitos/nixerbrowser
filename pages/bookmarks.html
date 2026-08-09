@@ -42,6 +42,7 @@
       <input id="bmSearch" type="text" placeholder="Buscar marcador…" style="flex:1;max-width:340px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;outline:none" />
       <button class="ghost" id="export">Exportar…</button>
       <button class="ghost" id="import">Importar…</button>
+      <button class="ghost" id="importChrome">Importar de Chrome</button>
       <button class="danger" id="clear">Borrar todo</button>
     </header>
     <main>
@@ -136,6 +137,11 @@
       document.getElementById('import').onclick = async function () {
         var n = await browserAPI.bookmarks.import()
         toast(n > 0 ? n + ' marcador(es) importado(s)' : 'No se importaron marcadores')
+        render()
+      }
+      document.getElementById('importChrome').onclick = async function () {
+        var r = await browserAPI.bookmarks.importChrome()
+        toast(r && r.error ? 'Error: ' + r.error : (r && r.count > 0 ? r.count + ' marcador(es) importados de Chrome' : 'No se importó nada'))
         render()
       }
       document.getElementById('clear').onclick = async function () {

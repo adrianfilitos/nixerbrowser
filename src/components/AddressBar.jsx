@@ -10,6 +10,7 @@ const INTERNAL_LABELS = {
   reader: 'Modo lectura',
   welcome: 'Bienvenida',
   incognito: 'Incógnito',
+  profiles: 'Perfiles',
 }
 
 export default function AddressBar({ url, internalKey, focusSignal, navState, onNavigate, onNavAction, onOverlayChange = () => {}, onShields, onSiteInfo }) {

@@ -86,6 +86,8 @@ function createMenus(deps) {
           { label: 'Paleta de comandos', accelerator: 'CmdOrCtrl+Shift+P', click: () => act('open-palette') },
           { label: 'Barra de direcciones', accelerator: 'CmdOrCtrl+L', click: () => act('focus-address') },
           { label: 'Enfocar barra de direcciones', accelerator: 'F6', click: () => act('focus-address') },
+          { label: 'Barra lateral', accelerator: 'CmdOrCtrl+Shift+B', click: () => act('toggle-sidebar') },
+          { label: 'Modo presentación', click: () => act('toggle-presentation') },
           { label: 'Herramientas de desarrollo', accelerator: 'F12', click: () => { const w = wc(); if (w) w.openDevTools() } },
           { type: 'separator' },
           { label: 'Copiar URL', accelerator: 'CmdOrCtrl+Shift+L', click: () => act('copy-url') },
@@ -165,6 +167,8 @@ function createMenus(deps) {
         label: 'Ajustes',
         submenu: [
           { label: 'Ajustes', accelerator: 'CmdOrCtrl+,', click: () => act('open-page', 'settings') },
+          { label: 'Perfiles', click: () => act('open-page', 'profiles') },
+          { label: 'Lista de lectura', click: () => act('open-page', 'readinglist') },
           { label: 'Descargas', accelerator: 'CmdOrCtrl+J', click: () => act('open-page', 'downloads') },
           { label: 'Contraseñas', click: () => act('open-page', 'passwords') },
           { label: 'Abrir carpeta de descargas', click: () => { try { require('electron').shell.openPath(require('electron').app.getPath('downloads')) } catch {} } },

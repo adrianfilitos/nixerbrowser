@@ -9,6 +9,7 @@ import ShieldsPopup from './components/ShieldsPopup.jsx'
 import SiteInfoPopup from './components/SiteInfoPopup.jsx'
 import TaskManager from './components/TaskManager.jsx'
 import Toasts from './components/Toasts.jsx'
+import Sidebar from './components/Sidebar.jsx'
 import { I } from './components/icons.jsx'
 
 const PERM_NAMES = {
@@ -35,6 +36,8 @@ const PAGE_TITLES = {
   extensions: 'Extensiones',
   about: 'Acerca de Nixer',
   credits: 'Créditos',
+  profiles: 'Perfiles',
+  readinglist: 'Lista de lectura',
   warning: 'Aviso de seguridad',
   incognito: 'Incógnito',
 }
@@ -84,6 +87,12 @@ export default function App() {
   const [splitWith, setSplitWith] = useState(null)
   const [closedCount, setClosedCount] = useState(0)
   const [statusUrl, setStatusUrl] = useState('')
+  const [sidebar, setSidebar] = useState(null)
+  const [presentation, setPresentation] = useState(false)
+
+  function toggleSidebar(tab) {
+    setSidebar((cur) => (cur === tab ? null : (tab || 'bookmarks')))
+  }
   const [permission, setPermission] = useState(null)
   const [incognito, setIncognito] = useState(false)
   const [savePrompt, setSavePrompt] = useState(null)
@@ -603,6 +612,12 @@ export default function App() {
         else if (action === 'status-url') {
           setStatusUrl(data || '')
         }
+        else if (action === 'toggle-sidebar') {
+          toggleSidebar(sidebar ? null : 'bookmarks')
+        }
+        else if (action === 'toggle-presentation') {
+          setPresentation((p) => !p)
+        }
       }),
     ]
     return () => { offs.forEach((off) => off && off()) }
@@ -625,7 +640,8 @@ export default function App() {
         ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
         : theme
       const root = document.documentElement
-      root.dataset.theme = resolved
+      const PALETTES = ['ocean', 'forest', 'grape', 'rose', 'sepia']
+      root.dataset.theme = PALETTES.includes(theme) ? theme : resolved
       const accent = s.accentColor || '#6c7bff'
       root.style.setProperty('--accent', accent)
       root.style.setProperty('--accent-2', accent)
@@ -765,7 +781,7 @@ export default function App() {
   ]
 
   return (
-    <div className="app" onDoubleClick={handleDblClick} onWheel={handleWheel}>
+    <div className={'app' + (presentation ? ' presentation' : '')} onDoubleClick={handleDblClick} onWheel={handleWheel}>
       <div className="chrome">
         <TabStrip
           tabs={tabs}
@@ -845,9 +861,20 @@ export default function App() {
           incognito={incognito}
           settings={settings}
           onNewTab={() => addTab()}
+          onToggleSidebar={() => toggleSidebar()}
+          sidebarActive={!!sidebar}
         />
       </div>
 
+      <div className="body-row">
+        {sidebar && (
+          <Sidebar
+            tab={sidebar}
+            onTab={setSidebar}
+            onNavigate={navigate}
+            onClose={() => setSidebar(null)}
+          />
+        )}
       <div className={'page-container' + (splitWith ? ' splitscreen' : '')}>
         {ready && tabs.map((t) => (
           <webview
@@ -872,6 +899,7 @@ export default function App() {
         {statusUrl && (
           <div className="status-bar" title={statusUrl}>{statusUrl}</div>
         )}
+      </div>
       </div>
 
       {shieldsOrigin && <ShieldsPopup origin={shieldsOrigin} anchor={shieldsAnchor} onClose={() => { setShieldsOrigin(null); setShieldsAnchor(null) }} />}

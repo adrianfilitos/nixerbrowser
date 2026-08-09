@@ -80,6 +80,7 @@ if (IS_INTERNAL_PAGE) {
     clear: () => ipcRenderer.invoke('bookmarks:clear'),
     export: () => ipcRenderer.invoke('bookmarks:export'),
     import: () => ipcRenderer.invoke('bookmarks:import'),
+    importChrome: () => ipcRenderer.invoke('bookmarks:import-chrome'),
   },
   downloads: {
     list: () => ipcRenderer.invoke('downloads:list'),
@@ -123,6 +124,12 @@ if (IS_INTERNAL_PAGE) {
   reader: {
     get: (id) => ipcRenderer.invoke('reader:get', id),
   },
+  readinglist: {
+    list: () => ipcRenderer.invoke('readinglist:list'),
+    add: (item) => ipcRenderer.invoke('readinglist:add', item),
+    remove: (id) => ipcRenderer.invoke('readinglist:remove', id),
+    open: (id) => ipcRenderer.invoke('readinglist:open', id),
+  },
   taskmanager: {
     list: () => ipcRenderer.invoke('taskmanager:list'),
   },
@@ -138,6 +145,11 @@ if (IS_INTERNAL_PAGE) {
   },
   app: {
     info: () => ipcRenderer.invoke('app:info'),
+  },
+  profiles: {
+    list: () => ipcRenderer.invoke('profiles:list'),
+    switch: (name) => ipcRenderer.invoke('profiles:switch', name),
+    remove: (name) => ipcRenderer.invoke('profiles:delete', name),
   },
   openTab: (url) => ipcRenderer.send('create-tab', url),
   onDownloads: (cb) => ipcRenderer.on('downloads-updated', (_e, d) => cb(d)),

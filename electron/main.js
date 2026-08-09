@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, session, shell, dialog, webContents } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const { DEV_SERVER_URL, PRIVATE_PARTITION, PROFILE } = require('./constants')
 
 app.commandLine.appendSwitch('js-flags', '--expose-gc')
 app.commandLine.appendSwitch('disable-features', 'OptimizationHints,MediaRouter,TranslateUI,NetworkTimeServiceQuerying,WebRtcLocalEcho,FontSrcLocalMatching,HistoryManipulationIntervention')
@@ -10,13 +11,13 @@ app.setAppUserModelId('com.nixer.browser')
 if (process.env.SMOKE === '1' && !process.env.NIXER_USER_DATA) {
   process.env.NIXER_USER_DATA = path.join(require('os').tmpdir(), 'nixer-smoke-profile')
 }
-app.setPath('userData', process.env.NIXER_USER_DATA || path.join(app.getPath('appData'), 'navegador'))
+const userDataBase = PROFILE === 'default' ? path.join(app.getPath('appData'), 'navegador') : path.join(app.getPath('appData'), 'navegador-profiles', PROFILE)
+app.setPath('userData', process.env.NIXER_USER_DATA || userDataBase)
 
 const store = require('./store')
 const adblock = require('./adblock')
 const ai = require('./ai')
 const nixer = require('./nixer')
-const { DEV_SERVER_URL, PRIVATE_PARTITION } = require('./constants')
 const ctx = require('./ctx')
 const util = require('./util')
 const defaultBrowser = require('./default-browser')
@@ -374,6 +375,34 @@ function registerIpc() {
   ipcMain.handle('bookmarks:remove', (_e, id) => store.removeBookmark(id))
   ipcMain.handle('bookmarks:update', (_e, id, patch) => store.updateBookmark(id, patch))
   ipcMain.handle('bookmarks:reorder', (_e, ids) => store.reorderBookmarks(ids))
+  ipcMain.handle('profiles:list', () => {
+    const base = path.join(app.getPath('appData'), 'navegador-profiles')
+    const names = []
+    try { names.push(...fs.readdirSync(base).filter((n) => fs.statSync(path.join(base, n)).isDirectory())) } catch {}
+    return { current: PROFILE, profiles: ['default', ...names.sort()] }
+  })
+  ipcMain.handle('profiles:switch', (_e, name) => {
+    const n = String(name || '').replace(/[^a-zA-Z0-9-_]/g, '').slice(0, 40) || 'default'
+    const args = process.argv.filter((a) => !a.startsWith('--profile=')).concat(['--profile=' + n])
+    app.relaunch({ args })
+    app.exit(0)
+    return true
+  })
+  ipcMain.handle('profiles:delete', (_e, name) => {
+    const n = String(name || '').replace(/[^a-zA-Z0-9-_]/g, '')
+    if (!n || n === 'default') return false
+    const dir = path.join(app.getPath('appData'), 'navegador-profiles', n)
+    try { fs.rmSync(dir, { recursive: true, force: true }) } catch {}
+    return true
+  })
+  ipcMain.handle('readinglist:list', () => store.listReadingList())
+  ipcMain.handle('readinglist:add', (_e, item) => store.addReadingItem(item))
+  ipcMain.handle('readinglist:remove', (_e, id) => store.removeReadingItem(id))
+  ipcMain.handle('readinglist:open', (_e, id) => {
+    const item = store.listReadingList().find((i) => i.id === id)
+    if (!item) return null
+    return reader.put({ title: item.title, url: item.url, text: item.text })
+  })
   ipcMain.handle('bookmarks:export', async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender)
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
@@ -388,6 +417,29 @@ function registerIpc() {
     const html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Marcadores</TITLE>\n<H1>Marcadores</H1>\n<DL><p>\n${rows}\n</DL><p>\n`
     fs.writeFileSync(filePath, html, 'utf8')
     return true
+  })
+  ipcMain.handle('bookmarks:import-chrome', () => {
+    const base = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Google', 'Chrome', 'User Data', 'Default', 'Bookmarks')
+    if (!fs.existsSync(base)) return { error: 'No se encontró el perfil de Chrome' }
+    try {
+      const data = JSON.parse(fs.readFileSync(base, 'utf8'))
+      let count = 0
+      const walk = (node, folder) => {
+        if (!node || !node.children) return
+        for (const c of node.children) {
+          if (c.type === 'folder') walk(c, folder ? folder + ' / ' + c.name : (c.name || ''))
+          else if (c.type === 'url' && /^https?:/.test(c.url || '')) {
+            store.addBookmark({ url: c.url, title: c.name || c.url, folder: folder || '' })
+            count++
+          }
+        }
+      }
+      const roots = (data && data.roots) || {}
+      for (const r of Object.values(roots)) walk(r, '')
+      return { count }
+    } catch (e) {
+      return { error: 'No se pudo leer el archivo: ' + (e && e.message) }
+    }
   })
   ipcMain.handle('bookmarks:import', async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender)

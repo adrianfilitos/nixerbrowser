@@ -4,6 +4,7 @@ const fs = require('fs')
 const store = require('./store')
 const adblock = require('./adblock')
 const { windows, ui } = require('./ctx')
+const { PROFILE } = require('./constants')
 
 function fileUrl(p) {
   return 'file://' + path.resolve(p).replace(/\\/g, '/')
@@ -97,6 +98,7 @@ function appInfo() {
     platform: process.platform,
     arch: process.arch,
     userData: app.getPath('userData'),
+    profile: PROFILE,
     defaultEngine: store.engineById(store.settings().defaultSearchEngine).name,
     extensions: store.listExtensions().length,
     adblockDomains: adblock.stats().count || 0,

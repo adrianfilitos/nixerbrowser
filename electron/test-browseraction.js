@@ -4,6 +4,9 @@ const path = require('path')
 const fs = require('fs')
 const os = require('os')
 
+process.env.NIXER_USER_DATA = path.join(os.tmpdir(), 'nixer-ba-profile')
+fs.rmSync(process.env.NIXER_USER_DATA, { recursive: true, force: true })
+
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
 app.whenReady().then(async () => {
@@ -22,17 +25,18 @@ app.whenReady().then(async () => {
   fs.writeFileSync(path.join(tmp, 'bg.js'), '')
 
   const ext = await session.defaultSession.loadExtension(tmp)
-  console.log('BA_EXT_LOADED:', !!ext)
+  console.log('BA_EXT_LOADED:', !!ext, 'ALL:', session.defaultSession.getAllExtensions().length)
 
   const win = BrowserWindow.getAllWindows()[0]
   const ui = win.webContents
   ui.on('console-message', (_e, level, message) => {
     console.log('UI_CONSOLE[' + level + ']:', message)
   })
-  await delay(1500)
-  const r = await ui.executeJavaScript(`(() => {
+  await delay(2500)
+  const r = await ui.executeJavaScript(`(async () => {
     const el = document.querySelector('browser-action-list')
     if (!el) return { exists: false }
+    await new Promise((r) => setTimeout(r, 1200))
     const root = el.shadowRoot || el
     const actions = root.querySelectorAll ? root.querySelectorAll('[part="action"]') : []
     return { exists: true, shadow: !!el.shadowRoot, actions: actions.length }

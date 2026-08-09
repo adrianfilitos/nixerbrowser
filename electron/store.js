@@ -96,6 +96,7 @@ const DEFAULTS = {
   passwords: [],
   extensions: [],
   recentSearches: [],
+  readingList: [],
 }
 
 let state = loadAll()
@@ -382,6 +383,22 @@ function recentSearches(limit) {
   return (state.recentSearches || []).slice(0, limit || 8)
 }
 
+function listReadingList() {
+  return state.readingList
+}
+
+function addReadingItem(item) {
+  const rec = { id: Date.now() + '-' + Math.floor(Math.random() * 1e4), title: item.title || item.url || '', url: item.url || '', text: item.text || '', ts: Date.now() }
+  state.readingList.unshift(rec)
+  persist('readingList')
+  return rec
+}
+
+function removeReadingItem(id) {
+  state.readingList = state.readingList.filter((i) => i.id !== id)
+  persist('readingList')
+}
+
 module.exports = {
   addHistory,
   updateHistoryTitle,
@@ -415,6 +432,9 @@ module.exports = {
   isLoopbackUrl,
   addSearch,
   recentSearches,
+  listReadingList,
+  addReadingItem,
+  removeReadingItem,
   listPasswords,
   addPassword,
   removePassword,

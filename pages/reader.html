@@ -32,6 +32,7 @@
       <span id="sizeVal" style="font-family:system-ui;font-size:12px;color:var(--dim);min-width:34px">19</span>
       <button id="plus">A+</button>
       <a id="orig" href="#" style="display:none">Abrir original</a>
+      <button id="saveBtn" style="display:none">Guardar en lista</button>
       <button id="themeBtn">Tema</button>
       <button id="backBtn">Cerrar pestaña</button>
     </div>
@@ -66,6 +67,9 @@
           }
         })
         if (!art.children.length) { art.textContent = data.text }
+        var saveBtn = document.getElementById('saveBtn')
+        saveBtn.style.display = 'inline'
+        saveBtn.onclick = function () { browserAPI.readinglist.add({ title: data.title, url: data.url, text: data.text }); saveBtn.textContent = 'Guardado ✓' }
       })
       document.getElementById('backBtn').onclick = function () { browserAPI.openTab('') }
       document.getElementById('themeBtn').onclick = function () {
