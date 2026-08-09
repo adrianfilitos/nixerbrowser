@@ -2,6 +2,7 @@ node_modules/
 dist/
 release/
 build/
+!build/nsis.nsh
 *.log
 .DS_Store
 Thumbs.db
