@@ -52,6 +52,21 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
   const rafRef = useRef(null)
   const suppressClickRef = useRef(false)
 
+  function dragDbg(...args) {
+    try {
+      if (!localStorage.getItem('nixer-drag-debug')) return
+      console.log('[drag]', ...args)
+      let b = document.getElementById('nixer-drag-badge')
+      if (!b) {
+        b = document.createElement('div')
+        b.id = 'nixer-drag-badge'
+        b.style.cssText = 'position:fixed;left:10px;bottom:10px;z-index:99999;background:#000;color:#0f0;font:11px monospace;padding:6px 8px;border-radius:6px;pointer-events:none;max-width:80vw;white-space:pre-wrap'
+        document.body.appendChild(b)
+      }
+      b.textContent = '[drag] ' + args.join(' ')
+    } catch {}
+  }
+
   function onMouseDown(e, t) {
     if (e.button === 1) {
       e.preventDefault()
@@ -64,6 +79,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
     dragMovedRef.current = false
     suppressClickRef.current = false
     dragStartRef.current = { x: e.clientX, y: e.clientY }
+    dragDbg('mousedown', String(t.id), e.clientX, e.clientY)
     if (window.api.dragStart) window.api.dragStart({ tabId: t.id, url: t.url, title: t.title })
   }
 
@@ -77,6 +93,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
         if (Math.hypot(dx, dy) < 5) return
         dragMovedRef.current = true
         setDraggingId(t.id)
+        dragDbg('threshold', e.screenX, e.screenY)
       }
       if (e.preventDefault) e.preventDefault()
       if (window.api.dragMove) window.api.dragMove(e.screenX, e.screenY)
@@ -85,6 +102,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
         const el = document.elementFromPoint(e.clientX, e.clientY)
         const tabEl = el && el.closest ? el.closest('.tab') : null
         if (tabEl && tabEl.dataset.id && String(tabEl.dataset.id) !== String(t.id)) {
+          dragDbg('reorder', String(t.id), '->', tabEl.dataset.id)
           onReorder(t.id, tabEl.dataset.id)
         }
       })
@@ -92,6 +110,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
     function onUp(e) {
       const t = dragTabRef.current
       if (!t) return
+      dragDbg('mouseup', e.screenX, e.screenY, 'moved=' + dragMovedRef.current)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       rafRef.current = null
       dragTabRef.current = null
