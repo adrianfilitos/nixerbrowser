@@ -5,6 +5,7 @@ const AdmZip = require('adm-zip')
 const { ElectronChromeExtensions } = require('electron-chrome-extensions')
 
 app.setName('Nixer Browser')
+app.setAppUserModelId('com.nixer.browser')
 app.setPath('userData', process.env.NIXER_USER_DATA || path.join(app.getPath('appData'), 'navegador'))
 
 const store = require('./store')
@@ -726,7 +727,7 @@ function registerIpc() {
   ipcMain.handle('set-default-browser', () => {
     const okHttp = app.setAsDefaultProtocolClient('http')
     const okHttps = app.setAsDefaultProtocolClient('https')
-    shell.openExternal('ms-settings:defaultapps')
+    try { shell.openExternal('ms-settings:defaultapps') } catch {}
     return okHttp && okHttps
   })
   ipcMain.handle('is-default-browser', () => app.isDefaultProtocolClient('http'))
