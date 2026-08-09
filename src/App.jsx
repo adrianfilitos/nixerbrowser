@@ -319,6 +319,28 @@ export default function App() {
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, group } : t)))
   }
 
+  function renameTab(id, title) {
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, title } : t)))
+  }
+
+  function moveTab(id, dir) {
+    setTabs((prev) => {
+      const next = [...prev]
+      const i = next.findIndex((t) => t.id === id)
+      const j = i + dir
+      if (i < 0 || j < 0 || j >= next.length) return prev
+      const tmp = next[i]
+      next[i] = next[j]
+      next[j] = tmp
+      return next
+    })
+  }
+
+  function closeTabsLeft(id) {
+    const idx = tabs.findIndex((t) => t.id === id)
+    tabs.forEach((t, i) => { if (i < idx) closeTab(t.id) })
+  }
+
   function muteTab(id) {
     const t = tabs.find((x) => x.id === id)
     if (!t) return
@@ -507,6 +529,7 @@ export default function App() {
       window.api.onUi((action, data) => {
         if (action === 'new-tab') addTab()
         else if (action === 'open-tab') addTab(data, { activate: !(settingsRef.current && settingsRef.current.openLinksInBackground) })
+        else if (action === 'open-tab-bg') addTab(data, { activate: false })
         else if (action === 'close-tab') closeTab(activeTab ? activeTab.id : null)
         else if (action === 'restore-tab') restoreTab()
         else if (action === 'cycle-tab') cycleTab(data)
@@ -552,6 +575,18 @@ export default function App() {
         }
         else if (action === 'bookmark-all') {
           bookmarkAllTabs()
+        }
+        else if (action === 'copy-title') {
+          const t = tabsRef.current.find((x) => x.active)
+          if (t && t.title) copyText(t.title)
+        }
+        else if (action === 'copy-markdown') {
+          const t = tabsRef.current.find((x) => x.active)
+          if (t) copyText('[' + (t.title || t.url || '') + '](' + (t.url || '') + ')')
+        }
+        else if (action === 'move-tab') {
+          const t = activeTab
+          if (t) moveTab(t.id, Number(data))
         }
       }),
     ]
@@ -733,6 +768,9 @@ export default function App() {
           onRestoreAll={restoreAllTabs}
           onReloadAll={reloadAllTabs}
           onNavigateTab={navigateTab}
+          onRename={renameTab}
+          onMove={moveTab}
+          onCloseLeft={closeTabsLeft}
           onPin={(id) => setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t)))}
           onNewUrl={(url) => addTab(url)}
           onRestore={() => restoreTab()}

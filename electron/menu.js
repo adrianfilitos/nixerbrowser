@@ -114,7 +114,11 @@ function createMenus(deps) {
           { type: 'separator' },
           { label: 'Pestaña siguiente', accelerator: 'CmdOrCtrl+Tab', click: () => act('cycle-tab', 1) },
           { label: 'Pestaña anterior', accelerator: 'CmdOrCtrl+Shift+Tab', click: () => act('cycle-tab', -1) },
+          { label: 'Mover pestaña a la izquierda', accelerator: 'Alt+Shift+Left', click: () => act('move-tab', -1) },
+          { label: 'Mover pestaña a la derecha', accelerator: 'Alt+Shift+Right', click: () => act('move-tab', 1) },
           { type: 'separator' },
+          { label: 'Copiar título de la página', click: () => act('copy-title') },
+          { label: 'Copiar como Markdown', click: () => act('copy-markdown') },
           { label: 'Gestionar historial', accelerator: 'CmdOrCtrl+H', click: () => act('open-page', 'history') },
         ],
       },
@@ -169,12 +173,13 @@ function createMenus(deps) {
 
   function showContentMenu(ctx, wc, params) {
     const template = []
-    if (params.linkURL) {
-      template.push({ label: 'Abrir enlace en pestaña nueva', click: () => sendUi(ctx, 'open-tab', params.linkURL) })
-      template.push({ label: 'Abrir enlace en ventana de incógnito', click: () => { const c2 = createWindow({ incognito: true }); setTimeout(() => sendUi(c2, 'open-tab', params.linkURL), 900) } })
-      template.push({ label: 'Copiar dirección del enlace', click: () => { if (wc) wc.copy(params.linkURL) } })
-      template.push({ type: 'separator' })
-    }
+  if (params.linkURL) {
+    template.push({ label: 'Abrir enlace en pestaña nueva', click: () => sendUi(ctx, 'open-tab', params.linkURL) })
+    template.push({ label: 'Abrir enlace en pestaña de fondo', click: () => sendUi(ctx, 'open-tab-bg', params.linkURL) })
+    template.push({ label: 'Abrir enlace en ventana de incógnito', click: () => { const c2 = createWindow({ incognito: true }); setTimeout(() => sendUi(c2, 'open-tab', params.linkURL), 900) } })
+    template.push({ label: 'Copiar dirección del enlace', click: () => { if (wc) wc.copy(params.linkURL) } })
+    template.push({ type: 'separator' })
+  }
     if (params.isEditable) {
       template.push({ label: 'Cortar', role: 'cut' }, { label: 'Copiar', role: 'copy' }, { label: 'Pegar', role: 'paste' }, { label: 'Seleccionar todo', role: 'selectAll' })
       template.push({ type: 'separator' })

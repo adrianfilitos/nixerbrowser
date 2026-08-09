@@ -27,6 +27,7 @@ const extensions = require('./extensions')
 const reader = require('./reader')
 const search = require('./search')
 const menus = require('./menu')
+const pageStyle = require('./page-style')
 
 if (store.settings().hardwareAcceleration === false) {
   app.disableHardwareAcceleration()
@@ -62,6 +63,7 @@ function guardState(origin) {
     blockAds: shields.blockAds !== undefined ? shields.blockAds : s.blockAds,
     blockScripts: shields.blockScripts !== undefined ? shields.blockScripts : s.blockScripts,
     blockThirdPartyCookies: shields.blockCookies !== undefined ? shields.blockCookies : s.blockThirdPartyCookies,
+    blockImages: s.showImages === false,
     sendDnt: s.sendDnt,
     httpsUpgrade: s.httpsUpgrade,
   }
@@ -428,6 +430,11 @@ function registerIpc() {
   ipcMain.handle('search:engines', () => ({ engines: store.engines(), defaultId: store.settings().defaultSearchEngine }))
   ipcMain.handle('search:url', (_e, q) => store.searchUrl(q))
   ipcMain.handle('search:suggest', (_e, q) => (store.settings().searchSuggestionsEnabled === false ? [] : search.searchSuggestions(q)))
+  ipcMain.handle('search:recent', (_e, q) => {
+    const term = String(q || '').toLowerCase()
+    return store.recentSearches().filter((s) => !term || s.toLowerCase().indexOf(term) !== -1)
+  })
+  ipcMain.on('search:record', (_e, q) => store.addSearch(q))
   ipcMain.handle('ai:chat', (_e, messages) => ai.chat(messages || []))
   ipcMain.handle('adblock:stats', () => adblock.stats())
   ipcMain.handle('adblock:refresh', () => { adblock.refresh(); return true })
@@ -514,6 +521,7 @@ app.on('web-contents-created', (_e, wc) => {
     if (c) showContentMenu(c, wc, params)
   })
   safeBrowsing.attachWebviewGuards(wc)
+  pageStyle.attach(wc)
   wc.setWindowOpenHandler(({ url }) => {
     if (store.settings().blockPopups) return { action: 'deny' }
     const c = ctx.ctxForWc(wc)

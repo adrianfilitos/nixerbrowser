@@ -2130,3 +2130,31 @@ webview.page-view.active {
 }
 .tab, .new-tab, .tab-manage, .restore-tab { border-radius: var(--radius) var(--radius) 0 0; }
 .tool-btn { border-radius: var(--radius); }
+
+.tab-rename {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: var(--bg0);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.tm-search {
+  padding: 0 6px 4px;
+}
+.tm-search input {
+  width: 100%;
+  padding: 6px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg0);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+.tm-search input:focus { border-color: var(--accent); }

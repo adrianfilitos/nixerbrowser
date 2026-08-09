@@ -3,9 +3,12 @@ import ContextMenu from './ContextMenu.jsx'
 import WindowControls from './WindowControls.jsx'
 import { I } from './icons.jsx'
 
-export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore, onGroup, splitWith, onSplit, onMute, onMoveWindow, onNewWindowUrl, closedCount, onRestoreAll, onReloadAll, onNavigateTab }) {
+export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore, onGroup, splitWith, onSplit, onMute, onMoveWindow, onNewWindowUrl, closedCount, onRestoreAll, onReloadAll, onNavigateTab, onRename, onMove, onCloseLeft }) {
   const [menu, setMenu] = useState(null)
   const [manageOpen, setManageOpen] = useState(false)
+  const [renamingId, setRenamingId] = useState(null)
+  const [renameVal, setRenameVal] = useState('')
+  const [filter, setFilter] = useState('')
   let dragId = null
   const colorSeq = useRef(0)
   const GROUP_COLORS = ['#e05252', '#d99a2b', '#3da26e', '#4a7bd0', '#8b5cf6', '#c4458c']
@@ -82,8 +85,12 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
           ? [{ icon: I.pin, label: 'Quitar del grupo', action: () => { onGroup(menu.tab.id, null); setMenu(null) } }]
           : []),
         { icon: I.volume, label: menu.tab.muted ? 'Reactivar sonido' : 'Silenciar pestaña', action: () => { onMute(menu.tab.id); setMenu(null) } },
+        { icon: I.form, label: 'Renombrar pestaña', accel: 'F2', action: () => { setRenameVal(menu.tab.title || ''); setRenamingId(menu.tab.id); setMenu(null) } },
         { icon: I.window, label: 'Mover a nueva ventana', action: () => { onMoveWindow(menu.tab.id); setMenu(null) } },
         { icon: I.window, label: 'Duplicar en ventana nueva', action: () => { onNewWindowUrl(menu.tab.url); setMenu(null) } },
+        { icon: I.arrow, label: 'Mover a la izquierda', accel: 'Alt+←', action: () => { onMove(menu.tab.id, -1); setMenu(null) } },
+        { icon: I.arrow, label: 'Mover a la derecha', accel: 'Alt+→', action: () => { onMove(menu.tab.id, 1); setMenu(null) } },
+        { icon: I.close, label: 'Cerrar pestañas a la izquierda', action: () => { onCloseLeft(menu.tab.id); setMenu(null) }, danger: true },
         ...groups.filter((g) => !menu.tab.group || g.id !== menu.tab.group.id).map((g) => ({
           icon: <span className="menu-color-dot" style={{ background: g.color }} />,
           label: 'Añadir al grupo: ' + g.label,
@@ -125,6 +132,13 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
               }
             }}
             onContextMenu={(e) => openMenu(e, t)}
+            onDoubleClick={(e) => { e.stopPropagation(); if (!t.pinned) { setRenameVal(t.title || ''); setRenamingId(t.id) } }}
+            onKeyDown={(e) => {
+              if (renamingId === t.id) {
+                if (e.key === 'Enter') { onRename(t.id, renameVal.trim() || t.title); setRenamingId(null) }
+                else if (e.key === 'Escape') setRenamingId(null)
+              }
+            }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault()
@@ -140,7 +154,14 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
             ) : (
               <span className="favicon globe" />
             )}
-            {!t.pinned && <span className="tab-title">{t.title || 'Nueva pestaña'}</span>}
+            {renamingId === t.id ? (
+              <input className="tab-rename" value={renameVal} autoFocus onChange={(e) => setRenameVal(e.target.value)} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => {
+                if (e.key === 'Enter') { onRename(t.id, renameVal.trim() || t.title); setRenamingId(null) }
+                else if (e.key === 'Escape') setRenamingId(null)
+              }} />
+            ) : (
+              <span className="tab-title">{t.title || 'Nueva pestaña'}</span>
+            )}
             {(t.audible || t.muted) && (
               <button className={'tab-audio' + (t.muted ? ' muted' : '')} title={t.muted ? 'Silenciado (clic para reactivar)' : 'Reproduciendo audio'} onClick={(e) => { e.stopPropagation(); onMute(t.id) }}>
                 {t.muted ? (
@@ -193,8 +214,11 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
                 <span>Pestañas ({tabs.length})</span>
                 <button className="tm-link" onClick={() => { setManageOpen(false); onNew() }}>+ Nueva</button>
               </div>
+              <div className="tm-search">
+                <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Buscar pestaña…" spellCheck={false} />
+              </div>
               <div className="tm-list">
-                {tabs.map((t) => (
+                {tabs.filter((t) => !filter || ((t.title || '') + ' ' + (t.url || '')).toLowerCase().indexOf(filter.toLowerCase()) !== -1).map((t) => (
                   <div key={t.id} className={'tm-tab' + (t.active ? ' active' : '')} onClick={() => { setManageOpen(false); onSelect(t.id) }} title={t.title || 'Nueva pestaña'}>
                     {t.favicon ? <img className="favicon" src={t.favicon} alt="" /> : <span className="favicon globe" />}
                     <span className="tm-title">{t.title || 'Nueva pestaña'}</span>

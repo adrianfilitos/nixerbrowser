@@ -117,6 +117,14 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
       if (cs) extra.push(cs)
       const cv = convSuggestion(q2)
       if (cv && (!cs || cv.url !== cs.url)) extra.push(cv)
+      let recents = []
+      try { recents = await window.api.searchRecent(q2) } catch {}
+      if (recents.length) {
+        const urls = await Promise.all(recents.map((s) => window.api.searchUrl(s).catch(() => null)))
+        recents.forEach((s, i) => {
+          if (urls[i]) extra.push({ type: 'recent', title: 'Buscar de nuevo: ' + s, url: urls[i] })
+        })
+      }
       setSuggestions(extra.concat(unique))
       setSelected(-1)
       setOpen(extra.length + unique.length > 0)
@@ -224,7 +232,10 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
     }
     let target = resolveTarget(raw)
     if (!target && e.ctrlKey && /^[\w-]+$/.test(raw)) target = 'https://' + raw + '.com'
-    if (!target) target = await window.api.searchUrl(raw)
+    if (!target) {
+      target = await window.api.searchUrl(raw)
+      window.api.searchRecord(raw)
+    }
     setOpen(false)
     if (e.altKey) {
       window.api.openNewTab(target)
@@ -264,6 +275,16 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
       const target = resolveTarget(raw) || 'https://www.google.com/search?q=' + encodeURIComponent(raw)
       window.api.openNewTab(target)
       setOpen(false)
+      return
+    }
+    if (e.key === 'Delete' && suggestions[selected]) {
+      const s = suggestions[selected]
+      if (s.type === 'history' || s.type === 'bookmark') {
+        e.preventDefault()
+        window.api.removeHistory(s.url)
+        setSuggestions((prev) => prev.filter((_, i) => i !== selected))
+        setSelected(-1)
+      }
       return
     }
     if (e.key === 'Tab' && inlineValue) {

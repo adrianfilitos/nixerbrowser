@@ -83,7 +83,7 @@
           groupItems.forEach(function (b) {
             var row = document.createElement('div')
             row.className = 'row'
-            row.innerHTML = '<span class="title"></span><span class="url"></span><select class="folder-select"><option value="">Sin carpeta</option></select><button class="del">Quitar</button>'
+            row.innerHTML = '<span class="title"></span><span class="url"></span><select class="folder-select"><option value="">Sin carpeta</option></select><button class="rename">Renombrar</button><button class="del">Quitar</button>'
             row.querySelector('.title').textContent = b.title || b.url
             row.querySelector('.url').textContent = b.url
             row.querySelector('.title').onclick = function () { browserAPI.openTab(b.url) }
@@ -104,6 +104,11 @@
             row.querySelector('.del').onclick = async function () {
               await browserAPI.bookmarks.remove(b.id)
               render()
+            }
+            var rename = row.querySelector('.rename')
+            if (rename) rename.onclick = async function () {
+              var t = prompt('Nuevo título:', b.title || '')
+              if (t !== null && t.trim()) { await browserAPI.bookmarks.update(b.id, { title: t.trim() }); render(); toast('Renombrado') }
             }
             list.appendChild(row)
           })

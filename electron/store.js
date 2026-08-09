@@ -73,6 +73,8 @@ const DEFAULT_SETTINGS = {
   offerPasswordSave: true,
   autofillEnabled: true,
   searchSuggestionsEnabled: true,
+  showImages: true,
+  forcePageTheme: '',
   blockPopups: true,
   autoplayPolicy: 'user-gesture-required',
   hardwareAcceleration: true,
@@ -93,6 +95,7 @@ const DEFAULTS = {
   session: [],
   passwords: [],
   extensions: [],
+  recentSearches: [],
 }
 
 let state = loadAll()
@@ -346,8 +349,7 @@ function globMatch(pattern, url) {
   return re.test(url)
 }
 
-function saveSession(tabs) {
-  state.session = tabs
+function saveSession(tabs) {  state.session = tabs
     .map((t) => ({ url: t.url, pinned: !!t.pinned }))
     .filter((t) => t.url && t.url.startsWith('http') && !isLoopbackUrl(t.url))
     .slice(0, 30)
@@ -361,6 +363,17 @@ function isLoopbackUrl(url) {
   } catch {
     return false
   }
+}
+
+function addSearch(q) {
+  const s = String(q || '').trim().slice(0, 200)
+  if (!s) return
+  state.recentSearches = [s, ...state.recentSearches.filter((x) => x !== s)].slice(0, 30)
+  persist('recentSearches')
+}
+
+function recentSearches(limit) {
+  return (state.recentSearches || []).slice(0, limit || 8)
 }
 
 module.exports = {
@@ -393,6 +406,8 @@ module.exports = {
   session,
   saveSession,
   isLoopbackUrl,
+  addSearch,
+  recentSearches,
   listPasswords,
   addPassword,
   removePassword,

@@ -247,6 +247,9 @@
           <div class="card">
             <div class="field"><div class="meta"><div class="label">Tamaño de fuente de páginas</div><div class="desc">Tamaño base de texto en los sitios web</div></div>
               <div class="control"><select id="pageFontSize"><option value="12">12 px</option><option value="14">14 px</option><option value="16">16 px</option><option value="18">18 px</option><option value="20">20 px</option><option value="22">22 px</option></select></div></div>
+            <div class="field"><div class="meta"><div class="label">Tema forzado de páginas</div><div class="desc">Obligar a los sitios a usar un tema (prefers-color-scheme)</div></div>
+              <div class="control"><select id="forcePageTheme"><option value="">Automático</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></div></div>
+            <div class="field"><div class="meta"><div class="label">Mostrar imágenes</div><div class="desc">Cargar imágenes en las páginas (desactivar ahorra datos)</div></div><div class="control"><label class="switch"><input type="checkbox" id="showImages" /><span class="track"><span class="thumb"></span></span></label></div></div>
             <div class="field"><div class="meta"><div class="label">Reproducción automática</div><div class="desc">Cuándo pueden reproducirse vídeos sin interacción</div></div>
               <div class="control"><select id="autoplayPolicy"><option value="no-user-gesture-required">Permitir siempre</option><option value="user-gesture-required">Requiere interacción</option><option value="document-user-activation-required">Solo con activación</option></select></div></div>
             <div class="field"><div class="meta"><div class="label">Zoom por defecto</div><div class="desc">Aplicado a las páginas nuevas</div></div>
@@ -415,6 +418,8 @@
         document.getElementById('showDownloadNotifications').checked = settings.showDownloadNotifications !== false
         document.getElementById('openFolderWhenDone').checked = !!settings.openFolderWhenDone
         document.getElementById('pageFontSize').value = String(settings.pageFontSize || 16)
+        document.getElementById('forcePageTheme').value = settings.forcePageTheme || ''
+        document.getElementById('showImages').checked = settings.showImages !== false
         document.getElementById('autoplayPolicy').value = settings.autoplayPolicy || 'user-gesture-required'
         document.getElementById('defaultZoom').value = String(settings.defaultZoom || 1)
         document.getElementById('autofillEnabled').checked = settings.autofillEnabled !== false
@@ -616,6 +621,8 @@
         bind('showDownloadNotifications', 'showDownloadNotifications')
         bind('openFolderWhenDone', 'openFolderWhenDone')
         bind('pageFontSize', 'pageFontSize', { parse: function (el) { return parseInt(el.value, 10) || 16 } })
+        bind('forcePageTheme', 'forcePageTheme')
+        bind('showImages', 'showImages')
         bind('autoplayPolicy', 'autoplayPolicy')
         bind('defaultZoom', 'defaultZoom', { parse: function (el) { return parseFloat(el.value) || 1 } })
         bind('autofillEnabled', 'autofillEnabled')

@@ -253,6 +253,13 @@ function init(sessionRef, getState) {
         logBlock(details.url, 'script')
         return callback({ cancel: true })
       }
+
+      // 5) Bloqueo de imágenes (ajuste "mostrar imágenes")
+      if (st.blockImages && type === 'image') {
+        bump(origin, 'ads')
+        logBlock(details.url, 'imagen')
+        return callback({ cancel: true })
+      }
     } catch {}
     callback({})
   })
