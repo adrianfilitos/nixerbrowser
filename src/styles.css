@@ -357,13 +357,13 @@ webview.page-view.active {
 }
 
 .tab.dragging {
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
-  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
   background: var(--bg1);
   color: var(--text);
   cursor: grabbing;
   z-index: 6;
-  transition: background 0.13s ease, color 0.13s ease, transform 0.12s ease, box-shadow 0.12s ease;
+  transition: background 0.13s ease, color 0.13s ease, transform 0.1s ease, box-shadow 0.1s ease;
 }
 
 .tab.pinned {

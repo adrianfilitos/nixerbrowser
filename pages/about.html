@@ -45,6 +45,7 @@
         document.getElementById('ver').textContent = 'Versión ' + i.version
         var rows = [
           ['Versión de la app', i.version],
+          ['Build (commit)', i.build || '—'],
           ['Electron', i.electron],
           ['Chromium', i.chrome],
           ['Node.js', i.node],

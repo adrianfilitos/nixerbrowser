@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   dragMove: (x, y) => ipcRenderer.send('drag-move', x, y),
   dragDrop: (x, y) => ipcRenderer.send('drag-drop', x, y),
   dragCancel: () => ipcRenderer.send('drag-cancel'),
+  dragTearoff: (x, y) => ipcRenderer.send('drag-tearoff', x, y),
   getDragState: () => ipcRenderer.invoke('get-drag-state'),
   dockDragged: () => ipcRenderer.invoke('dock-dragged'),
   setActiveWc: (wcId) => ipcRenderer.send('set-active-wc', wcId),

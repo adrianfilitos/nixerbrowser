@@ -79,6 +79,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
     dragMovedRef.current = false
     suppressClickRef.current = false
     dragStartRef.current = { x: e.clientX, y: e.clientY }
+    setDraggingId(t.id)
     dragDbg('mousedown', String(t.id), e.clientX, e.clientY)
     if (window.api.dragStart) window.api.dragStart({ tabId: t.id, url: t.url, title: t.title })
   }
@@ -92,12 +93,23 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
         const dy = e.clientY - dragStartRef.current.y
         if (Math.hypot(dx, dy) < 5) return
         dragMovedRef.current = true
-        setDraggingId(t.id)
         try { localStorage.setItem('nixer-drag-hint-v2', '1') } catch {}
         dragDbg('threshold', e.screenX, e.screenY)
       }
       if (e.preventDefault) e.preventDefault()
       if (window.api.dragMove) window.api.dragMove(e.screenX, e.screenY)
+      const strip = document.querySelector('.tab-strip')
+      if (strip && e.clientY > strip.getBoundingClientRect().bottom + 30) {
+        dragDbg('tearoff', e.screenX, e.screenY)
+        if (window.api.dragTearoff) window.api.dragTearoff(e.screenX, e.screenY)
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+        dragTabRef.current = null
+        dragMovedRef.current = false
+        setDraggingId(null)
+        suppressClickRef.current = true
+        return
+      }
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       rafRef.current = requestAnimationFrame(() => {
         const el = document.elementFromPoint(e.clientX, e.clientY)

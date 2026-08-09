@@ -92,6 +92,7 @@ function appInfo() {
   return {
     name: 'Nixer Browser',
     version: app.getVersion(),
+    build: buildHash(),
     electron: process.versions.electron,
     chrome: process.versions.chrome,
     node: process.versions.node,
@@ -103,6 +104,18 @@ function appInfo() {
     extensions: store.listExtensions().length,
     adblockDomains: adblock.stats().count || 0,
   }
+}
+
+let _buildHash = null
+function buildHash() {
+  if (_buildHash) return _buildHash
+  try {
+    const { execSync } = require('child_process')
+    _buildHash = execSync('git rev-parse --short HEAD', { cwd: path.join(__dirname, '..'), timeout: 3000 }).toString().trim()
+  } catch {
+    _buildHash = app.isPackaged ? 'dist' : 'dev'
+  }
+  return _buildHash
 }
 
 module.exports = {

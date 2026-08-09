@@ -116,12 +116,45 @@ function dockInto(targetCtx) {
   dragState = null
 }
 
+function openUrlInWindow(wctx, url) {
+  if (!wctx || !url) return
+  const wc = ctx.ui(wctx)
+  if (!wc || wc.isDestroyed()) return
+  const send = () => { if (!wc.isDestroyed()) ctx.sendUi(wctx, 'open-tab', url) }
+  if (!wc.isLoading()) { send(); return }
+  wc.once('did-finish-load', () => setTimeout(send, 200))
+}
+
 function detachFromDrag(srcCtx) {
   if (!dragState || !dragState.url) return
   const st = dragState
   const wctx = createWindow({ incognito: srcCtx ? srcCtx.incognito : false })
-  if (wctx) setTimeout(() => ctx.sendUi(wctx, 'open-tab', st.url), 900)
+  openUrlInWindow(wctx, st.url)
   if (srcCtx && st.tabId) ctx.sendUi(srcCtx, 'close-tab-by-id', st.tabId)
+  dragState = null
+}
+
+function tearoffWindowAt(sx, sy) {
+  const d = screen.getDisplayNearestPoint({ x: sx, y: sy })
+  const wa = d.workArea
+  let x = Math.round(sx - 130)
+  let y = Math.round(sy - 60)
+  x = Math.max(wa.x, Math.min(x, wa.x + wa.width - 320))
+  y = Math.max(wa.y, Math.min(y, wa.y + wa.height - 300))
+  return { x, y }
+}
+
+function tearOff(srcCtx, sx, sy) {
+  if (!dragState) return
+  const st = dragState
+  const p = screen.getCursorScreenPoint()
+  const cx = typeof sx === 'number' ? sx : p.x
+  const cy = typeof sy === 'number' ? sy : p.y
+  const pos = tearoffWindowAt(cx, cy)
+  const wctx = createWindow({ incognito: srcCtx ? srcCtx.incognito : false, x: pos.x, y: pos.y })
+  openUrlInWindow(wctx, st.url)
+  if (srcCtx && st.tabId) ctx.sendUi(srcCtx, 'close-tab-by-id', st.tabId)
+  closeDragTarget()
   dragState = null
 }
 
@@ -165,10 +198,12 @@ function guardState(origin) {
   }
 }
 
-function createWindow({ incognito = false } = {}) {
+function createWindow({ incognito = false, x, y } = {}) {
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
+    x,
+    y,
     backgroundColor: '#141414',
     title: 'Nixer Browser',
     frame: false,
@@ -227,7 +262,7 @@ function registerIpc() {
   ipcMain.on('toggle-fullscreen', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.setFullScreen(!w.isFullScreen()) })
   ipcMain.on('create-window', (e, incognito, url) => {
     const c = createWindow({ incognito: !!incognito })
-    if (url && c) setTimeout(() => ctx.sendUi(c, 'open-tab', url), 900)
+    if (url && c) openUrlInWindow(c, url)
   })
   ipcMain.handle('reader:get', (_e, id) => reader.getReader(id))
 
@@ -250,6 +285,7 @@ function registerIpc() {
   ipcMain.on('drag-move', async (_e, sx, sy) => {
     if (!dragState) return
     const hit = (typeof sx === 'number' && typeof sy === 'number') ? windowAtPoint(sx, sy, dragState.win) : windowAtCursor()
+    if (process.env.DBG_DRAG) console.log('DRAG_MOVE', JSON.stringify({ sx, sy, hit: hit && ctx.windows.get(hit.win) && ctx.windows.get(hit.win).id, srcId: dragState.winId, winSet: BrowserWindow.getAllWindows().map((w) => { const b = w.getContentBounds(); return { id: ctx.windows.get(w) && ctx.windows.get(w).id, vis: w.isVisible(), b } }) }))
     if (hit) {
       const targetCtx = ctx.windows.get(hit.win)
       attachDragTarget(hit.win.webContents, targetCtx)
@@ -286,6 +322,10 @@ function registerIpc() {
     setTimeout(() => { dragState = null }, 500)
   })
   ipcMain.on('drag-cancel', () => { closeDragTarget(); dragState = null })
+  ipcMain.on('drag-tearoff', (e, sx, sy) => {
+    const srcCtx = ctx.ctxFor(e)
+    tearOff(srcCtx, typeof sx === 'number' ? sx : undefined, typeof sy === 'number' ? sy : undefined)
+  })
   ipcMain.handle('get-drag-state', () => dragState ? { id: dragState.id, winId: dragState.winId } : null)
   ipcMain.handle('dock-dragged', (e) => {
     const target = ctx.ctxFor(e)
