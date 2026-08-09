@@ -561,7 +561,6 @@ export default function App() {
     })()
     try {
       if (!localStorage.getItem('nixer-drag-hint-seen')) {
-        localStorage.setItem('nixer-drag-hint-seen', '1')
         setTimeout(() => addToast('Consejo: pulsa y arrastra una pestaña para reordenarla · suéltala fuera para abrirla en una ventana nueva', 'info'), 1200)
       }
     } catch {}
