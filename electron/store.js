@@ -63,6 +63,7 @@ const DEFAULT_SETTINGS = {
   lastTabCloseAction: 'newTab',
   openLinksInBackground: false,
   confirmCloseMultiple: true,
+  clearDataOnExit: false,
   launchAtStartup: false,
   minimizeToTray: false,
   startMinimized: false,

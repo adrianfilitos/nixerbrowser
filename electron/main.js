@@ -127,7 +127,10 @@ function registerIpc() {
   ipcMain.on('win-toggle-maximize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) { if (w.isMaximized()) w.unmaximize(); else w.maximize() } })
   ipcMain.on('win-close', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close() })
   ipcMain.on('toggle-fullscreen', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.setFullScreen(!w.isFullScreen()) })
-  ipcMain.on('create-window', (e, incognito) => createWindow({ incognito: !!incognito }))
+  ipcMain.on('create-window', (e, incognito, url) => {
+    const c = createWindow({ incognito: !!incognito })
+    if (url && c) setTimeout(() => ctx.sendUi(c, 'open-tab', url), 900)
+  })
   ipcMain.handle('reader:get', (_e, id) => reader.getReader(id))
 
   ipcMain.handle('view-info', () => {
@@ -407,6 +410,9 @@ function registerIpc() {
   ipcMain.handle('history:remove', (_e, url) => store.removeHistory(url))
   ipcMain.handle('downloads:list', () => store.downloads())
   ipcMain.handle('downloads:clear', () => { store.clearDownloads(); util.broadcastDownloads() })
+  ipcMain.handle('downloads:open', (_e, p) => { if (p) { try { shell.openPath(p) } catch {} } return true })
+  ipcMain.handle('downloads:show', (_e, p) => { if (p) { try { shell.showItemInFolder(p) } catch {} } return true })
+  ipcMain.handle('downloads:cancel', () => true)
   ipcMain.handle('settings:get', () => util.settingsForUi())
   ipcMain.handle('settings:defaults', () => store.settingsDefaults())
   ipcMain.handle('settings:set', (_e, patch) => {
@@ -483,6 +489,9 @@ const { buildMenu, showContentMenu } = menus.createMenus({
   saveAsUrl: downloads.saveAsUrl,
   captureScreenshot: util.captureScreenshot,
   togglePip: util.togglePip,
+  ai,
+  readerGet: reader.getReader,
+  readerPut: reader.put,
 })
 
 app.on('web-contents-created', (_e, wc) => {
@@ -674,6 +683,13 @@ async function runSmoke() {
     && results.webviewAfterNav === 'YES'
   app.exit(ok ? 0 : 1)
 }
+
+app.on('will-quit', () => {
+  if (store.settings().clearDataOnExit) {
+    try { session.defaultSession.clearCache() } catch {}
+    try { session.defaultSession.clearStorageData() } catch {}
+  }
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

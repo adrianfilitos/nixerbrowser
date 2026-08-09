@@ -46,7 +46,8 @@ contextBridge.exposeInMainWorld('api', {
   toggleMaximize: () => ipcRenderer.send('win-toggle-maximize'),
   close: () => ipcRenderer.send('win-close'),
   toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
-  createWindow: (incognito) => ipcRenderer.send('create-window', incognito),
+  createWindow: (incognito, url) => ipcRenderer.send('create-window', incognito, url),
+  openNewTab: (url) => ipcRenderer.send('create-tab', url),
 
   onTabs: (cb) => {}, // tabs are local to the renderer now
   onNavigation: (cb) => {},

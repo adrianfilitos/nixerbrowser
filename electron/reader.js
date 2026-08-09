@@ -29,4 +29,11 @@ function getReader(id) {
   return readers.get(id) || null
 }
 
-module.exports = { extractReader, getReader }
+function put(content) {
+  const id = Date.now() + '-' + Math.floor(Math.random() * 1e5)
+  readers.set(id, content)
+  setTimeout(() => readers.delete(id), 120000)
+  return id
+}
+
+module.exports = { extractReader, getReader, put }

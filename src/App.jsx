@@ -49,6 +49,19 @@ function isLoopback(url) {
   }
 }
 
+function copyText(t) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(t).catch(() => {})
+  } else {
+    const ta = document.createElement('textarea')
+    ta.value = t
+    document.body.appendChild(ta)
+    ta.select()
+    try { document.execCommand('copy') } catch {}
+    document.body.removeChild(ta)
+  }
+}
+
 export default function App() {
   const [tabs, setTabs] = useState([])
   const [navState, setNavState] = useState({ canGoBack: false, canGoForward: false, isLoading: false })
@@ -68,6 +81,7 @@ export default function App() {
   const [siteInfoAnchor, setSiteInfoAnchor] = useState(null)
   const [taskManagerOpen, setTaskManagerOpen] = useState(false)
   const [splitWith, setSplitWith] = useState(null)
+  const [closedCount, setClosedCount] = useState(0)
   const [permission, setPermission] = useState(null)
   const [incognito, setIncognito] = useState(false)
   const [savePrompt, setSavePrompt] = useState(null)
@@ -89,6 +103,17 @@ export default function App() {
 
   function activeEl() {
     return activeTab ? elsRef.current.get(activeTab.id) : null
+  }
+
+  function handleWheel(e) {
+    if (!e.ctrlKey) return
+    e.preventDefault()
+    const el = activeEl()
+    if (!el) return
+    try {
+      const z = el.getZoomFactor() || 1
+      el.setZoomFactor(Math.min(3, Math.max(0.25, z + (e.deltaY < 0 ? 0.1 : -0.1))))
+    } catch {}
   }
 
   function refreshNavState() {
@@ -185,6 +210,10 @@ export default function App() {
       update({ favicon: e.favicons && e.favicons[0] ? e.favicons[0] : null })
     })
 
+    el.addEventListener('media-started-playing', () => { update({ audible: true }) })
+    el.addEventListener('media-paused', () => { update({ audible: false }) })
+    try { el.setAudioMuted(!!(tabsRef.current.find((x) => x.id === id) || {}).muted) } catch {}
+
     el.addEventListener('did-start-loading', () => refreshNavState())
     el.addEventListener('did-stop-loading', () => refreshNavState())
 
@@ -211,6 +240,8 @@ export default function App() {
       wcId: null,
       active: false,
       group: null,
+      audible: false,
+      muted: false,
     }
     setTabs((prev) => prev.map((t) => ({ ...t, active: false })).concat(tab))
     if (opts.activate !== false) requestAnimationFrame(() => activate(id))
@@ -239,6 +270,7 @@ export default function App() {
     if (!t) return
     if (t.url && t.url.startsWith('http')) closedTabsRef.current.unshift({ url: t.url, title: t.title })
     if (closedTabsRef.current.length > 50) closedTabsRef.current.length = 50
+    setClosedCount(closedTabsRef.current.length)
     setTabs((prev) => {
       const next = prev.filter((x) => x.id !== id)
       if (next.length === 0) {
@@ -266,6 +298,7 @@ export default function App() {
       if (t.url && t.url.startsWith('http')) closedTabsRef.current.unshift({ url: t.url, title: t.title })
     })
     if (closedTabsRef.current.length > 50) closedTabsRef.current.length = 50
+    setClosedCount(closedTabsRef.current.length)
     if (settingsRef.current && settingsRef.current.lastTabCloseAction === 'closeWindow') {
       window.api.close()
       return
@@ -286,6 +319,28 @@ export default function App() {
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, group } : t)))
   }
 
+  function muteTab(id) {
+    const t = tabs.find((x) => x.id === id)
+    if (!t) return
+    const next = !t.muted
+    setTabs((prev) => prev.map((x) => (x.id === id ? { ...x, muted: next } : x)))
+    const el = elsRef.current.get(id)
+    if (el) {
+      try { el.setAudioMuted(next) } catch {}
+    }
+  }
+
+  function moveTabToWindow(id) {
+    const t = tabs.find((x) => x.id === id)
+    if (!t || !t.url) return
+    window.api.createWindow(false, t.url)
+    closeTab(id)
+  }
+
+  function openInNewWindow(url) {
+    if (url) window.api.createWindow(false, url)
+  }
+
   function createTabObject() {
     const src = computeSrc('')
     const id = Date.now() + '-' + tabSeq++
@@ -300,6 +355,8 @@ export default function App() {
       wcId: null,
       active: true,
       group: null,
+      audible: false,
+      muted: false,
     }
   }
 
@@ -312,6 +369,7 @@ export default function App() {
 
   function restoreTab() {
     const t = closedTabsRef.current.shift()
+    setClosedCount(closedTabsRef.current.length)
     if (t) addTab(t.url)
   }
 
@@ -432,6 +490,27 @@ export default function App() {
         }
         else if (action === 'ui-toast') {
           addToast(data && data.text, data && data.kind)
+        }
+        else if (action === 'copy-url') {
+          const t = tabsRef.current.find((x) => x.active)
+          const url = (t && (t.url || (t.internal ? 'nixer://' + t.internal : ''))) || ''
+          if (url) copyText(url)
+        }
+        else if (action === 'view-source') {
+          const t = tabsRef.current.find((x) => x.active)
+          if (t && t.url && /^https?:/.test(t.url)) addTab('view-source:' + t.url)
+        }
+        else if (action === 'goto-tab') {
+          const list = tabsRef.current
+          const idx = list.length > 0 && Number(data) >= 9 ? list.length - 1 : Number(data)
+          const t = list[idx]
+          if (t) activate(t.id)
+        }
+        else if (action === 'toggle-mute') {
+          const el = elsRef.current.get(activeTab && activeTab.id)
+          if (el) {
+            try { el.setAudioMuted(el.isAudioMuted ? !el.isAudioMuted() : true) } catch {}
+          }
         }
       }),
     ]
@@ -595,7 +674,7 @@ export default function App() {
   ]
 
   return (
-    <div className="app" onDoubleClick={handleDblClick}>
+    <div className="app" onDoubleClick={handleDblClick} onWheel={handleWheel}>
       <div className="chrome">
         <TabStrip
           tabs={tabs}
@@ -606,6 +685,10 @@ export default function App() {
           onGroup={setTabGroup}
           splitWith={splitWith}
           onSplit={toggleSplit}
+          onMute={muteTab}
+          onMoveWindow={moveTabToWindow}
+          onNewWindowUrl={openInNewWindow}
+          closedCount={closedCount}
           onPin={(id) => setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t)))}
           onNewUrl={(url) => addTab(url)}
           onRestore={() => restoreTab()}
@@ -628,6 +711,7 @@ export default function App() {
             onNavigate={navigate}
             onRemove={confirmRemoveBookmark}
             onNewUrl={(url) => addTab(url)}
+            onAdd={(url, title) => window.api.addBookmark({ url, title }).then(() => { refreshBookmarks(); addToast('Marcador añadido', 'ok') })}
           />
         )}
         <Toolbar

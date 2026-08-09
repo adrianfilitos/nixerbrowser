@@ -2011,3 +2011,122 @@ webview.page-view.active {
     transform: translateY(0);
   }
 }
+
+
+/* ===== UX polish ===== */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+.toolbar .tool-btn { transition: background 0.12s ease, color 0.12s ease, transform 0.06s ease; }
+.toolbar .tool-btn:hover { background: var(--bg3); color: var(--text); }
+.toolbar .tool-btn:active { transform: scale(0.92); }
+
+.tab { transition: background 0.13s ease, color 0.13s ease, transform 0.06s ease; }
+.tab:hover { background: var(--bg2); color: var(--text); }
+.tab.active {
+  background: var(--bg0);
+  color: var(--text);
+  font-weight: 600;
+}
+.tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.bar-input { transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease; }
+.bar-input:hover { border-color: var(--bg4); }
+
+.dropdown, .ctx-menu, .ext-menu, .tab-manage-menu, .engine-menu, .autocomplete, .palette, .popup-card {
+  animation: pop 0.12s ease;
+}
+@keyframes pop {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.suggestion, .drop-item, .ctx-item, .tm-tab, .engine-item, .ext-menu-item {
+  transition: background 0.08s ease, color 0.08s ease;
+}
+
+.bm-item { border-radius: 7px; padding: 3px 8px; transition: background 0.1s ease; }
+.bm-item:hover { background: var(--bg3); }
+
+.bookmarks-bar .bm-empty { color: var(--text-faint); font-size: 12px; }
+
+.page-container { background: var(--bg0); }
+
+.tool-btn .badge {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-audio {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+}
+.tab-audio:hover { color: var(--text); background: var(--bg4); }
+.tab-audio.muted { color: var(--warn); }
+
+.restore-tab {
+  width: 33px;
+  height: 33px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 9px 9px 0 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.restore-tab:hover { background: var(--bg2); }
+
+.tab-list { gap: 4px; padding-right: 4px; }
+
+.menu-btn { transition: background 0.12s ease; border-radius: 9px; }
+.menu-btn:hover { background: var(--bg3); }
+
+/* Cómodo: más aire y redondeo general */
+:root {
+  --radius: 10px;
+  --radius-lg: 14px;
+}
+.tab, .new-tab, .tab-manage, .restore-tab { border-radius: var(--radius) var(--radius) 0 0; }
+.tool-btn { border-radius: var(--radius); }

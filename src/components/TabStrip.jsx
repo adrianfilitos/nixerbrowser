@@ -3,7 +3,7 @@ import ContextMenu from './ContextMenu.jsx'
 import WindowControls from './WindowControls.jsx'
 import { I } from './icons.jsx'
 
-export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore, onGroup, splitWith, onSplit }) {
+export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore, onGroup, splitWith, onSplit, onMute, onMoveWindow, onNewWindowUrl, closedCount }) {
   const [menu, setMenu] = useState(null)
   const [manageOpen, setManageOpen] = useState(false)
   let dragId = null
@@ -81,6 +81,9 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
         ...(menu.tab.group
           ? [{ icon: I.pin, label: 'Quitar del grupo', action: () => { onGroup(menu.tab.id, null); setMenu(null) } }]
           : []),
+        { icon: I.volume, label: menu.tab.muted ? 'Reactivar sonido' : 'Silenciar pestaña', action: () => { onMute(menu.tab.id); setMenu(null) } },
+        { icon: I.window, label: 'Mover a nueva ventana', action: () => { onMoveWindow(menu.tab.id); setMenu(null) } },
+        { icon: I.window, label: 'Duplicar en ventana nueva', action: () => { onNewWindowUrl(menu.tab.url); setMenu(null) } },
         ...groups.filter((g) => !menu.tab.group || g.id !== menu.tab.group.id).map((g) => ({
           icon: <span className="menu-color-dot" style={{ background: g.color }} />,
           label: 'Añadir al grupo: ' + g.label,
@@ -105,7 +108,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
     : []
 
   return (
-    <div className="tab-strip" onMouseMove={handleMove} onMouseUp={endDrag}>
+    <div className="tab-strip" onMouseMove={handleMove} onMouseUp={endDrag} onDoubleClick={(e) => { if (!e.target.closest('.tab')) onNew() }}>
       <div className="tab-list">
         {tabs.map((t) => (
           <div
@@ -132,6 +135,15 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
               <span className="favicon globe" />
             )}
             {!t.pinned && <span className="tab-title">{t.title || 'Nueva pestaña'}</span>}
+            {(t.audible || t.muted) && (
+              <button className={'tab-audio' + (t.muted ? ' muted' : '')} title={t.muted ? 'Silenciado (clic para reactivar)' : 'Reproduciendo audio'} onClick={(e) => { e.stopPropagation(); onMute(t.id) }}>
+                {t.muted ? (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>
+                ) : (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/></svg>
+                )}
+              </button>
+            )}
             {!t.pinned && (
               <button
                 className="tab-close"
@@ -153,6 +165,14 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
             <path d="M12 5v14M5 12h14" />
           </svg>
         </button>
+        {closedCount > 0 && (
+          <button className="restore-tab" title={'Reabrir pestaña cerrada (' + closedCount + ') · Ctrl+Shift+T'} onClick={onRestore}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+          </button>
+        )}
       </div>
       <div className="tab-manage-wrap">
           <button className={'tab-manage' + (manageOpen ? ' active' : '')} title="Manejar pestañas" onClick={() => setManageOpen((o) => !o)}>

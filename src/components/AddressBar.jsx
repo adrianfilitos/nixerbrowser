@@ -112,9 +112,14 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
         seen.add(k)
         return true
       })
-      setSuggestions(unique)
+      const extra = []
+      const cs = calcSuggestion(q2)
+      if (cs) extra.push(cs)
+      const cv = convSuggestion(q2)
+      if (cv && (!cs || cv.url !== cs.url)) extra.push(cv)
+      setSuggestions(extra.concat(unique))
       setSelected(-1)
-      setOpen(unique.length > 0)
+      setOpen(extra.length + unique.length > 0)
     }, 120)
     return () => clearTimeout(timerRef.current)
   }, [value, internalKey, aiMode, focused])
@@ -130,6 +135,53 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
       if (aiInputRef.current) aiInputRef.current.focus()
       else if (inputRef.current) inputRef.current.focus()
     }, 0)
+  }
+
+  function resolveTarget(raw) {
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return raw
+    if (/^localhost(:\d+)?(\/.*)?$/.test(raw)) return 'http://' + raw
+    if (/^[\w-]+(\.[\w-]+)+([/:?#].*)?$/.test(raw)) return 'https://' + raw
+    return null
+  }
+
+  function calcSuggestion(q) {
+    const t = q.trim()
+    if (!/^[\d\s+\-*/().%^,]+$/.test(t) || !/[+\-*/^]/.test(t)) return null
+    try {
+      const expr = t.replace(/\^/g, '**').replace(/,/g, '.')
+      const val = Function('"use strict";return (' + expr + ')')()
+      if (typeof val === 'number' && isFinite(val)) {
+        const rounded = Math.round(val * 1e6) / 1e6
+        return { type: 'calc', title: t + ' = ' + rounded, url: 'https://www.google.com/search?q=' + encodeURIComponent(t) }
+      }
+    } catch {}
+    return null
+  }
+
+  const UNITS = {
+    currency: { usd: 1, eur: 0.92, gbp: 0.79, jpy: 157, mxn: 18.5 },
+    length: { km: 1, mi: 0.621371, m: 1000, cm: 100000, ft: 3280.84, in: 39370.1 },
+    weight: { kg: 1, lb: 2.20462, oz: 35.274 },
+    volume: { l: 1, gal: 0.264172, ml: 1000 },
+  }
+
+  function convSuggestion(q) {
+    const m = /^(\d+(?:[.,]\d+)?)\s*(usd|eur|gbp|jpy|mxn|km|mi|m|cm|ft|in|kg|lb|oz|l|gal|ml|c|f)\s*(?:a|to|en|->)\s*(usd|eur|gbp|jpy|mxn|km|mi|m|cm|ft|in|kg|lb|oz|l|gal|ml|c|f)$/i.exec(q.trim())
+    if (!m) return null
+    const val = parseFloat(m[1].replace(',', '.'))
+    const from = m[2].toLowerCase()
+    const to = m[3].toLowerCase()
+    let result = null
+    if ((from === 'c' || from === 'f') && (to === 'c' || to === 'f')) {
+      const c = from === 'c' ? val : (val - 32) * 5 / 9
+      result = to === 'c' ? c : c * 9 / 5 + 32
+    } else {
+      for (const [, map] of Object.entries(UNITS)) {
+        if (from in map && to in map) { result = val / map[from] * map[to]; break }
+      }
+    }
+    if (result === null || !isFinite(result)) return null
+    return { type: 'calc', title: val + ' ' + from + ' = ' + (Math.round(result * 1000) / 1000) + ' ' + to, url: 'https://www.google.com/search?q=' + encodeURIComponent(q.trim()) }
   }
 
   async function submit(e) {
@@ -161,12 +213,15 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
       pick(suggestions[selected])
       return
     }
-    let target
-    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) target = raw
-    else if (/^localhost(:\d+)?(\/.*)?$/.test(raw)) target = 'http://' + raw
-    else if (/^[\w-]+(\.[\w-]+)+([/:?#].*)?$/.test(raw)) target = 'https://' + raw
-    else target = await window.api.searchUrl(raw)
+    let target = resolveTarget(raw)
+    if (!target && e.ctrlKey && /^[\w-]+$/.test(raw)) target = 'https://' + raw + '.com'
+    if (!target) target = await window.api.searchUrl(raw)
     setOpen(false)
+    if (e.altKey) {
+      window.api.openNewTab(target)
+      if (inputRef.current) inputRef.current.blur()
+      return
+    }
     onNavigate(target)
     if (inputRef.current) inputRef.current.blur()
   }
@@ -193,6 +248,15 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
 
   function onKeyDown(e) {
     if (aiMode || value.trim().startsWith('/')) return
+    if (e.key === 'Enter' && e.altKey) {
+      e.preventDefault()
+      const raw = value.trim()
+      if (!raw) return
+      const target = resolveTarget(raw) || 'https://www.google.com/search?q=' + encodeURIComponent(raw)
+      window.api.openNewTab(target)
+      setOpen(false)
+      return
+    }
     if (e.key === 'Tab' && inlineValue) {
       e.preventDefault()
       setValue(inlineValue)
