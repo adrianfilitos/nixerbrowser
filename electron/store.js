@@ -83,6 +83,7 @@ const DEFAULT_SETTINGS = {
   aiProvider: 'openai',
   aiTemperature: 0.7,
   aiMaxTokens: 1000,
+  language: 'es',
   downloadPath: '',
   autofillProfile: { name: '', email: '', phone: '', company: '', address: '', city: '', zip: '' },
 }
@@ -97,6 +98,8 @@ const DEFAULTS = {
   extensions: [],
   recentSearches: [],
   readingList: [],
+  tabGroups: {},
+  workspaces: [],
 }
 
 let state = loadAll()
@@ -355,12 +358,37 @@ function globMatch(pattern, url) {
   const re = new RegExp('^' + pattern.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$')
   return re.test(url)
 }
-
-function saveSession(tabs) {  state.session = tabs
-    .map((t) => ({ url: t.url, pinned: !!t.pinned }))
+function saveSession(tabs) {
+  state.session = tabs
+    .map((t) => ({ url: t.url, pinned: !!t.pinned, group: t.group || undefined }))
     .filter((t) => t.url && t.url.startsWith('http') && !isLoopbackUrl(t.url))
     .slice(0, 30)
   persist('session')
+}
+
+function tabGroups() {
+  return state.tabGroups || {}
+}
+
+function setTabGroups(groups) {
+  state.tabGroups = groups || {}
+  persist('tabGroups')
+}
+
+function listWorkspaces() {
+  return state.workspaces || []
+}
+
+function saveWorkspace(name, tabs) {
+  const rec = { name: String(name || '').slice(0, 40), tabs: tabs.slice(0, 30), ts: Date.now() }
+  state.workspaces = [rec, ...(state.workspaces || []).filter((w) => w.name !== rec.name)].slice(0, 20)
+  persist('workspaces')
+  return rec
+}
+
+function removeWorkspace(name) {
+  state.workspaces = (state.workspaces || []).filter((w) => w.name !== name)
+  persist('workspaces')
 }
 
 function isLoopbackUrl(url) {
@@ -435,6 +463,11 @@ module.exports = {
   listReadingList,
   addReadingItem,
   removeReadingItem,
+  tabGroups,
+  setTabGroups,
+  listWorkspaces,
+  saveWorkspace,
+  removeWorkspace,
   listPasswords,
   addPassword,
   removePassword,

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'" />
+    <title>Espacios de trabajo</title>
+    <style>
+      :root { --bg:#151518; --bg2:#1c1c20; --bg3:#26262c; --border:#2e2e35; --text:#e9e9ee; --dim:#9c9ca6; --faint:#6c6c76; --accent:#6c7bff; --danger:#e05252; }
+      :root.light { --bg:#f2f3f7; --bg2:#ffffff; --bg3:#ececf2; --border:#d9dae2; --text:#191a1f; --dim:#54555e; --faint:#7a7b85; --accent:#4a5ae0; }
+      * { box-sizing:border-box; margin:0; padding:0; }
+      body { font-family:system-ui,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+      header { padding:13px 24px; border-bottom:1px solid var(--border); background:var(--bg2); }
+      h1 { font-size:18px; font-weight:700; }
+      main { max-width:680px; margin:0 auto; padding:16px 24px 48px; }
+      .ws { display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid var(--border); border-radius:12px; background:var(--bg2); margin-bottom:10px; }
+      .ws .info { flex:1; min-width:0; }
+      .ws .info b { display:block; font-size:14px; }
+      .ws .info span { color:var(--faint); font-size:12px; }
+      button { padding:7px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg3); color:var(--text); cursor:pointer; font-size:12px; }
+      button:hover { filter:brightness(1.12); }
+      button.danger { color:var(--danger); }
+      .empty { color:var(--faint); text-align:center; padding:60px 0; line-height:1.8; }
+    </style>
+  </head>
+  <body>
+    <header><h1>Espacios de trabajo</h1></header>
+    <main id="list"></main>
+    <script>
+      function render() {
+        browserAPI.workspaces.list().then(function (ws) {
+          var list = document.getElementById('list')
+          list.innerHTML = ''
+          if (!ws.length) { list.innerHTML = '<div class="empty">Ningún espacio guardado.<br/>Abre pestañas y usa Menú → "Guardar como espacio de trabajo…".</div>'; return }
+          ws.forEach(function (w) {
+            var row = document.createElement('div')
+            row.className = 'ws'
+            row.innerHTML = '<div class="info"><b></b><span></span></div><button class="open">Abrir</button><button class="danger del">Borrar</button>'
+            row.querySelector('.info b').textContent = w.name
+            row.querySelector('.info span').textContent = w.tabs.length + ' pestañas · ' + new Date(w.ts).toLocaleDateString('es')
+            row.querySelector('.open').onclick = function () { browserAPI.workspaces.open(w.name) }
+            row.querySelector('.del').onclick = async function () {
+              if (confirm('¿Borrar el espacio "' + w.name + '"?')) { await browserAPI.workspaces.remove(w.name); render() }
+            }
+            list.appendChild(row)
+          })
+        })
+      }
+      render()
+      browserAPI.settings.get().then(function (s) {
+        var light = s.theme === 'light' || (s.theme === 'system' && matchMedia('(prefers-color-scheme: light)').matches)
+        document.documentElement.classList.toggle('light', light)
+      })
+    </script>
+  </body>
+</html>

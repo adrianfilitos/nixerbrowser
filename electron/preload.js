@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('api', {
   searchRecent: (q) => ipcRenderer.invoke('search:recent', q),
   searchRecord: (q) => ipcRenderer.send('search:record', q),
   removeHistory: (url) => ipcRenderer.invoke('history:remove', url),
+  installSite: (url, title) => ipcRenderer.invoke('site:install', url, title),
   shieldsGet: (origin) => ipcRenderer.invoke('shields:get', origin),
   shieldsSet: (origin, patch) => ipcRenderer.invoke('shields:set', { origin, patch }),
   adblockRecent: () => ipcRenderer.invoke('adblock:recent'),

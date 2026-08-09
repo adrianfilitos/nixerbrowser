@@ -4,6 +4,7 @@ import { Modal } from './Modal.jsx'
 export default function TaskManager({ onClose, onKill }) {
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
+  const [desc, setDesc] = useState(true)
 
   useEffect(() => {
     let alive = true
@@ -23,6 +24,9 @@ export default function TaskManager({ onClose, onKill }) {
     }
   }, [])
 
+  const sorted = [...rows].sort((a, b) => (desc ? b.mem - a.mem : a.mem - b.mem))
+  const max = Math.max(1, ...rows.map((r) => r.mem))
+
   return (
     <Modal
       title="Administrador de tareas"
@@ -33,16 +37,25 @@ export default function TaskManager({ onClose, onKill }) {
     >
       <table className="tm-table">
         <thead>
-          <tr><th>Página</th><th>Memoria</th><th></th></tr>
+          <tr>
+            <th>Página</th>
+            <th style={{ cursor: 'pointer' }} onClick={() => setDesc((d) => !d)}>Memoria {desc ? '▼' : '▲'}</th>
+            <th></th>
+          </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {sorted.map((r) => (
             <tr key={r.id}>
               <td>
                 <div className="tm-title">{r.title}</div>
                 <div className="tm-url">{r.url || ''}</div>
               </td>
-              <td className="tm-mem">{fmtMem(r.mem)}</td>
+              <td className="tm-mem">
+                <div className="mem-bar">
+                  <div className="mem-fill" style={{ width: Math.max(4, Math.round((r.mem / max) * 100)) + '%' }} />
+                </div>
+                {fmtMem(r.mem)}
+              </td>
               <td>
                 <button className="bar-btn" title="Finalizar" onClick={() => onKill(r.id)}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, session, shell, dialog, webContents } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const crypto = require('crypto')
 const { DEV_SERVER_URL, PRIVATE_PARTITION, PROFILE } = require('./constants')
 
 app.commandLine.appendSwitch('js-flags', '--expose-gc')
@@ -29,6 +30,8 @@ const reader = require('./reader')
 const search = require('./search')
 const menus = require('./menu')
 const pageStyle = require('./page-style')
+const sqlite = require('./sqlite')
+const { autoUpdater } = require('electron-updater')
 
 if (store.settings().hardwareAcceleration === false) {
   app.disableHardwareAcceleration()
@@ -217,6 +220,41 @@ function registerIpc() {
   ipcMain.handle('passwords:list', () => store.listPasswords())
   ipcMain.handle('passwords:add', (_e, p) => store.addPassword(p))
   ipcMain.handle('passwords:remove', (_e, id) => store.removePassword(id))
+  ipcMain.handle('passwords:check', async () => {
+    const list = store.listPasswords()
+    const results = []
+    for (const p of list) {
+      if (!p.password) continue
+      const sha = crypto.createHash('sha1').update(p.password).digest('hex').toUpperCase()
+      const prefix = sha.slice(0, 5)
+      const suffix = sha.slice(5)
+      let breached = false
+      try {
+        const res = await net.fetch('https://api.pwnedpasswords.com/range/' + prefix, { signal: AbortSignal.timeout(8000) })
+        const body = await res.text()
+        breached = body.split(/\r?\n/).some((l) => l.split(':')[0].toUpperCase() === suffix)
+      } catch {}
+      if (breached) results.push({ origin: p.origin, username: p.username })
+      await new Promise((r) => setTimeout(r, 350))
+    }
+    return results
+  })
+  ipcMain.handle('passwords:import', async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'CSV', extensions: ['csv'] }] })
+    if (canceled || !filePaths || !filePaths[0]) return 0
+    const text = fs.readFileSync(filePaths[0], 'utf8')
+    const lines = text.split(/\r?\n/).filter((l) => l.trim())
+    let count = 0
+    for (const line of lines.slice(1)) {
+      const cols = line.split(',')
+      const origin = (cols[0] || '').trim()
+      const username = (cols[1] || '').trim()
+      const password = (cols[2] || '').trim()
+      if (origin && password) { store.addPassword({ origin, username, password }); count++ }
+    }
+    return count
+  })
 
   ipcMain.on('content-scripts', (e, payload) => {
     e.sender.send('content-scripts-result', store.contentScriptsFor((payload && payload.url) || ''))
@@ -403,6 +441,18 @@ function registerIpc() {
     if (!item) return null
     return reader.put({ title: item.title, url: item.url, text: item.text })
   })
+  ipcMain.handle('groups:get', () => store.tabGroups())
+  ipcMain.handle('groups:set', (_e, g) => { store.setTabGroups(g); return true })
+  ipcMain.handle('workspaces:list', () => store.listWorkspaces())
+  ipcMain.handle('workspaces:save', (_e, name, tabs) => store.saveWorkspace(name, tabs))
+  ipcMain.handle('workspaces:open', (_e, name) => {
+    const ws = store.listWorkspaces().find((w) => w.name === name)
+    if (!ws) return false
+    const c = ctx.currentCtx()
+    ws.tabs.forEach((t) => { if (c && t.url) ctx.sendUi(c, 'open-tab-bg', t.url) })
+    return true
+  })
+  ipcMain.handle('workspaces:delete', (_e, name) => { store.removeWorkspace(name); return true })
   ipcMain.handle('bookmarks:export', async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender)
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
@@ -440,6 +490,51 @@ function registerIpc() {
     } catch (e) {
       return { error: 'No se pudo leer el archivo: ' + (e && e.message) }
     }
+  })
+  ipcMain.handle('import-chrome-full', () => {
+    const base = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Google', 'Chrome', 'User Data', 'Default')
+    const out = { history: 0, passwords: 0, error: null }
+    const histFile = path.join(base, 'History')
+    if (fs.existsSync(histFile)) {
+      try {
+        const ctx = sqlite.openDb(histFile)
+        if (ctx) {
+          const root = sqlite.findTable(ctx, 'urls')
+          if (root) {
+            const rows = sqlite.scanTable(ctx, root, 5)
+            for (const r of rows) {
+              const url = r[1]
+              if (url && /^https?:/.test(url)) {
+                store.addHistory({ url, title: r[2] || url, ts: Date.now() })
+                out.history++
+              }
+            }
+          }
+        }
+      } catch (e) { out.error = 'Historial: ' + (e && e.message) }
+    }
+    const loginFile = path.join(base, 'Login Data')
+    if (fs.existsSync(loginFile)) {
+      try {
+        const ctx = sqlite.openDb(loginFile)
+        if (ctx) {
+          const root = sqlite.findTable(ctx, 'logins')
+          if (root) {
+            const rows = sqlite.scanTable(ctx, root, 7)
+            for (const r of rows) {
+              const origin = r[0]
+              const user = r[3] || ''
+              const pass = r[5] || ''
+              if (origin && /^https?:/.test(origin) && pass) {
+                store.addPassword({ origin, username: user, password: pass })
+                out.passwords++
+              }
+            }
+          }
+        }
+      } catch (e) { out.error = 'Contraseñas: ' + (e && e.message) }
+    }
+    return out
   })
   ipcMain.handle('bookmarks:import', async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender)
@@ -532,6 +627,17 @@ function registerIpc() {
       await ses.clearStorageData({ origin })
     } catch {}
     return true
+  })
+  ipcMain.handle('site:install', (_e, url, title) => {
+    if (!/^https?:/.test(url || '')) return false
+    try {
+      const desktop = app.getPath('desktop')
+      const safe = String(title || 'Sitio').replace(/[\\/:*?"<>|]/g, '').slice(0, 60)
+      fs.writeFileSync(path.join(desktop, safe + '.url'), '[InternetShortcut]\r\nURL=' + url + '\r\nIconFile=' + process.execPath + '\r\nIconIndex=0\r\n')
+      return true
+    } catch {
+      return false
+    }
   })
   ipcMain.handle('data:clear', async (_e, what) => {
     const ses = session.defaultSession
@@ -659,6 +765,9 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
   setInterval(util.gcHiddenWebviews, 45000)
+  try {
+    if (app.isPackaged) autoUpdater.checkForUpdatesAndNotify().catch(() => {})
+  } catch {}
   const startUrl = process.argv.find((a) => /^https?:\/\//i.test(a) && !store.isLoopbackUrl(a))
   if (startUrl) {
     setTimeout(() => {

@@ -38,6 +38,7 @@ const PAGE_TITLES = {
   credits: 'Créditos',
   profiles: 'Perfiles',
   readinglist: 'Lista de lectura',
+  workspaces: 'Espacios de trabajo',
   warning: 'Aviso de seguridad',
   incognito: 'Incógnito',
 }
@@ -89,6 +90,8 @@ export default function App() {
   const [statusUrl, setStatusUrl] = useState('')
   const [sidebar, setSidebar] = useState(null)
   const [presentation, setPresentation] = useState(false)
+  const [tabSearchOpen, setTabSearchOpen] = useState(false)
+  const [tabSearchQuery, setTabSearchQuery] = useState('')
 
   function toggleSidebar(tab) {
     setSidebar((cur) => (cur === tab ? null : (tab || 'bookmarks')))
@@ -250,7 +253,7 @@ export default function App() {
       internal: opts.internal || internalForSrc(src),
       wcId: null,
       active: false,
-      group: null,
+      group: opts.group || null,
       audible: false,
       muted: false,
     }
@@ -327,7 +330,13 @@ export default function App() {
   }
 
   function setTabGroup(id, group) {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, group } : t)))
+    setTabs((prev) => {
+      const next = prev.map((t) => (t.id === id ? { ...t, group } : t))
+      const groups = {}
+      next.forEach((t) => { if (t.group) groups[t.group.id] = t.group })
+      try { window.api.groups.set(groups) } catch {}
+      return next
+    })
   }
 
   function renameTab(id, title) {
@@ -504,7 +513,7 @@ export default function App() {
     clearTimeout(sessionTimerRef.current)
     sessionTimerRef.current = setTimeout(() => {
       setTabs((prev) => {
-        window.api.saveSession(prev.filter((t) => t.url && t.url.startsWith('http') && !isLoopback(t.url)).map((t) => ({ url: t.url, pinned: !!t.pinned })))
+        window.api.saveSession(prev.filter((t) => t.url && t.url.startsWith('http') && !isLoopback(t.url)).map((t) => ({ url: t.url, pinned: !!t.pinned, group: t.group ? t.group.id : undefined })))
         return prev
       })
     }, 1500)
@@ -529,7 +538,8 @@ export default function App() {
         const sess = await window.api.getSession()
         if (cancelled) return
         if (sess && sess.length && s.startupBehavior === 'restore') {
-          sess.forEach((u) => addTab(u.url, { pinned: u.pinned }))
+          const groups = (await window.api.groups.get().catch(() => ({}))) || {}
+          sess.forEach((u) => addTab(u.url, { pinned: u.pinned, group: u.group ? groups[u.group] : undefined }))
           const first = tabsRef.current[0]
           if (first) setTimeout(() => activate(first.id), 150)
         } else {
@@ -609,6 +619,18 @@ export default function App() {
           const t = activeTab
           if (t) moveTab(t.id, Number(data))
         }
+        else if (action === 'translate-page') {
+          const t = tabsRef.current.find((x) => x.active)
+          if (t && t.url && /^https?:/.test(t.url)) {
+            addTab('https://translate.google.com/translate?sl=auto&tl=es&u=' + encodeURIComponent(t.url))
+          }
+        }
+        else if (action === 'install-site') {
+          const t = tabsRef.current.find((x) => x.active)
+          if (t && t.url && /^https?:/.test(t.url)) {
+            window.api.installSite(t.url, t.title).then((ok) => addToast(ok ? 'Acceso directo creado en el escritorio' : 'No se pudo crear', ok ? 'ok' : 'info'))
+          }
+        }
         else if (action === 'status-url') {
           setStatusUrl(data || '')
         }
@@ -617,6 +639,16 @@ export default function App() {
         }
         else if (action === 'toggle-presentation') {
           setPresentation((p) => !p)
+        }
+        else if (action === 'open-tab-search') {
+          setTabSearchQuery('')
+          setTabSearchOpen(true)
+        }
+        else if (action === 'save-workspace') {
+          const name = window.prompt('Nombre del espacio de trabajo:', '')
+          if (!name || !name.trim()) return
+          const list = tabsRef.current.filter((t) => t.url && t.url.startsWith('http')).map((t) => ({ url: t.url, title: t.title, pinned: !!t.pinned, group: t.group ? t.group.id : undefined }))
+          window.api.workspaces.save(name.trim(), list).then(() => addToast('Espacio guardado: ' + name.trim(), 'ok'))
         }
       }),
     ]
@@ -901,6 +933,30 @@ export default function App() {
         )}
       </div>
       </div>
+
+      {tabSearchOpen && (() => {
+        const q = tabSearchQuery.toLowerCase()
+        const list = tabs.filter((t) => !q || ((t.title || '') + ' ' + (t.url || '')).toLowerCase().includes(q))
+        return (
+          <div className="tab-search-overlay" onClick={(e) => { if (e.target === e.currentTarget) setTabSearchOpen(false) }}>
+            <div className="tab-search-box">
+              <input autoFocus value={tabSearchQuery} onChange={(e) => setTabSearchQuery(e.target.value)} placeholder="Buscar pestaña…"
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setTabSearchOpen(false)
+                  if (e.key === 'Enter' && list[0]) { switchTab(list[0].id); setTabSearchOpen(false) }
+                }} />
+              <div className="tab-search-list">
+                {list.slice(0, 20).map((t) => (
+                  <div key={t.id} className={'ts-item' + (t.active ? ' active' : '')} onClick={() => { switchTab(t.id); setTabSearchOpen(false) }}>
+                    <span className="ts-title">{t.title || 'Nueva pestaña'}</span>
+                    <span className="ts-url">{t.url || ''}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {shieldsOrigin && <ShieldsPopup origin={shieldsOrigin} anchor={shieldsAnchor} onClose={() => { setShieldsOrigin(null); setShieldsAnchor(null) }} />}
       {siteInfoUrl && <SiteInfoPopup url={siteInfoUrl} anchor={siteInfoAnchor} onClose={() => { setSiteInfoUrl(null); setSiteInfoAnchor(null) }} />}

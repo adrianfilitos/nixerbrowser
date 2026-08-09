@@ -81,6 +81,7 @@ if (IS_INTERNAL_PAGE) {
     export: () => ipcRenderer.invoke('bookmarks:export'),
     import: () => ipcRenderer.invoke('bookmarks:import'),
     importChrome: () => ipcRenderer.invoke('bookmarks:import-chrome'),
+    importChromeFull: () => ipcRenderer.invoke('import-chrome-full'),
   },
   downloads: {
     list: () => ipcRenderer.invoke('downloads:list'),
@@ -111,6 +112,8 @@ if (IS_INTERNAL_PAGE) {
     list: () => ipcRenderer.invoke('passwords:list'),
     add: (p) => ipcRenderer.invoke('passwords:add', p),
     remove: (id) => ipcRenderer.invoke('passwords:remove', id),
+    check: () => ipcRenderer.invoke('passwords:check'),
+    import: () => ipcRenderer.invoke('passwords:import'),
   },
   extensions: {
     list: () => ipcRenderer.invoke('extensions:list'),
@@ -150,6 +153,16 @@ if (IS_INTERNAL_PAGE) {
     list: () => ipcRenderer.invoke('profiles:list'),
     switch: (name) => ipcRenderer.invoke('profiles:switch', name),
     remove: (name) => ipcRenderer.invoke('profiles:delete', name),
+  },
+  groups: {
+    get: () => ipcRenderer.invoke('groups:get'),
+    set: (g) => ipcRenderer.invoke('groups:set', g),
+  },
+  workspaces: {
+    list: () => ipcRenderer.invoke('workspaces:list'),
+    save: (name, tabs) => ipcRenderer.invoke('workspaces:save', name, tabs),
+    open: (name) => ipcRenderer.invoke('workspaces:open', name),
+    remove: (name) => ipcRenderer.invoke('workspaces:delete', name),
   },
   openTab: (url) => ipcRenderer.send('create-tab', url),
   onDownloads: (cb) => ipcRenderer.on('downloads-updated', (_e, d) => cb(d)),

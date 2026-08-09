@@ -281,6 +281,8 @@
             <div class="field"><div class="meta"><div class="label">Iniciar minimizado</div><div class="desc">Abrir la ventana minimizada</div></div><div class="control"><label class="switch"><input type="checkbox" id="startMinimized" /><span class="track"><span class="thumb"></span></span></label></div></div>
             <div class="field"><div class="meta"><div class="label">Ahorro de memoria</div><div class="desc">Libera memoria de las pestañas ocultas en segundo plano</div></div><div class="control"><label class="switch"><input type="checkbox" id="memorySaver" /><span class="track"><span class="thumb"></span></span></label></div></div>
             <div class="field"><div class="meta"><div class="label">Contraseñas guardadas</div><div class="desc">Ver y gestionar credenciales</div></div><div class="control"><button class="btn" id="openPasswords">Gestionar contraseñas</button></div></div>
+            <div class="field"><div class="meta"><div class="label">Idioma de la interfaz</div><div class="desc">Idioma de los menús (se aplica al reiniciar)</div></div>
+              <div class="control"><select id="language"><option value="es">Español</option><option value="en">English</option></select></div></div>
           </div>
         </section>
 
@@ -447,6 +449,7 @@
         document.getElementById('minimizeToTray').checked = !!settings.minimizeToTray
         document.getElementById('startMinimized').checked = !!settings.startMinimized
         document.getElementById('memorySaver').checked = settings.memorySaver !== false
+        document.getElementById('language').value = settings.language || 'es'
         document.getElementById('hardwareAcceleration').checked = settings.hardwareAcceleration !== false
         document.getElementById('gpuRasterization').checked = settings.gpuRasterization !== false
         document.getElementById('reduceMotion').checked = !!settings.reduceMotion
@@ -642,6 +645,7 @@
         bind('minimizeToTray', 'minimizeToTray')
         bind('startMinimized', 'startMinimized')
         bind('memorySaver', 'memorySaver')
+        bind('language', 'language', { label: 'Se aplicará al reiniciar' })
         bind('hardwareAcceleration', 'hardwareAcceleration', { label: 'Se aplicará al reiniciar' })
         bind('gpuRasterization', 'gpuRasterization', { label: 'Se aplicará al reiniciar' })
         bind('reduceMotion', 'reduceMotion')

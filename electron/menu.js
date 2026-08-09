@@ -20,6 +20,36 @@ function readAloud(wc, text) {
   try { wc.executeJavaScript(js) } catch {}
 }
 
+const EN = {
+  'Archivo': 'File', 'Nueva pestaña': 'New Tab', 'Nueva ventana': 'New Window', 'Nueva ventana de incógnito': 'New Incognito Window',
+  'Cerrar pestaña': 'Close Tab', 'Reabrir pestaña cerrada': 'Reopen Closed Tab', 'Cerrar ventana': 'Close Window',
+  'Imprimir': 'Print', 'Guardar página como…': 'Save Page As…', 'Pestaña 1': 'Tab 1', 'Pestaña 2': 'Tab 2', 'Pestaña 3': 'Tab 3',
+  'Pestaña 4': 'Tab 4', 'Pestaña 5': 'Tab 5', 'Pestaña 6': 'Tab 6', 'Pestaña 7': 'Tab 7', 'Pestaña 8': 'Tab 8',
+  'Última pestaña': 'Last Tab', 'Guardar como espacio de trabajo…': 'Save as Workspace…', 'Espacios de trabajo': 'Workspaces',
+  'Editar': 'Edit', 'Cortar': 'Cut', 'Copiar': 'Copy', 'Pegar': 'Paste', 'Seleccionar todo': 'Select All', 'Deshacer': 'Undo', 'Rehacer': 'Redo',
+  'Ver': 'View', 'Atrás': 'Back', 'Adelante': 'Forward', 'Inicio': 'Home', 'Recargar': 'Reload', 'Recargar sin caché': 'Hard Reload',
+  'Detener': 'Stop', 'Acercar': 'Zoom In', 'Alejar': 'Zoom Out', 'Restablecer zoom': 'Reset Zoom', 'Pantalla completa': 'Fullscreen',
+  'Buscar en página': 'Find in Page', 'Paleta de comandos': 'Command Palette', 'Barra de direcciones': 'Address Bar',
+  'Enfocar barra de direcciones': 'Focus Address Bar', 'Barra lateral': 'Sidebar', 'Buscar pestañas': 'Search Tabs',
+  'Modo presentación': 'Presentation Mode', 'Herramientas de desarrollo': 'Developer Tools', 'Modo lectura': 'Reader Mode',
+  'Administrador de tareas': 'Task Manager', 'Capturar pantalla': 'Take Screenshot', 'Copiar URL': 'Copy URL',
+  'Ver código fuente': 'View Source', 'Silenciar pestaña': 'Mute Tab', 'Traducir página': 'Translate Page',
+  'Instalar sitio como acceso directo': 'Install Site Shortcut', 'Ayuda': 'Help', 'Acerca de Nixer Browser': 'About Nixer Browser',
+  'Créditos y licencias': 'Credits and Licenses', 'Historial': 'History', 'Página anterior': 'Previous Page', 'Página siguiente': 'Next Page',
+  'Pestaña siguiente': 'Next Tab', 'Pestaña anterior': 'Previous Tab', 'Mover pestaña a la izquierda': 'Move Tab Left',
+  'Mover pestaña a la derecha': 'Move Tab Right', 'Copiar título de la página': 'Copy Page Title', 'Copiar como Markdown': 'Copy as Markdown',
+  'Gestionar historial': 'Manage History', 'Marcadores': 'Bookmarks', 'Añadir esta página': 'Add This Page',
+  'Añadir todas las pestañas': 'Bookmark All Tabs', 'Gestionar marcadores': 'Manage Bookmarks', 'Mostrar barra de marcadores': 'Show Bookmarks Bar',
+  'IA': 'AI', 'Chat con IA': 'AI Chat', 'Configurar IA': 'Configure AI', 'Resumir esta página': 'Summarize This Page',
+  'Ajustes': 'Settings', 'Perfiles': 'Profiles', 'Lista de lectura': 'Reading List', 'Descargas': 'Downloads',
+  'Contraseñas': 'Passwords', 'Abrir carpeta de descargas': 'Open Downloads Folder',
+}
+
+function tr(label) {
+  if (store.settings().language === 'en' && EN[label]) return EN[label]
+  return label
+}
+
 function createMenus(deps) {
   const { createWindow, extractReader, savePageOf, saveAsUrl, captureScreenshot, togglePip, ai, readerGet, readerPut } = deps
 
@@ -36,6 +66,8 @@ function createMenus(deps) {
           { type: 'separator' },
           { label: 'Cerrar pestaña', accelerator: 'CmdOrCtrl+W', click: () => act('close-tab') },
           { label: 'Reabrir pestaña cerrada', accelerator: 'CmdOrCtrl+Shift+T', click: () => act('restore-tab') },
+          { label: 'Guardar como espacio de trabajo…', click: () => act('save-workspace') },
+          { label: 'Espacios de trabajo', click: () => act('open-page', 'workspaces') },
           { label: 'Cerrar ventana', accelerator: 'CmdOrCtrl+Shift+W', click: () => { const w = BrowserWindow.getFocusedWindow(); if (w) w.close() } },
           { type: 'separator' },
           { label: 'Pestaña 1', accelerator: 'CmdOrCtrl+1', click: () => act('goto-tab', 0) },
@@ -87,11 +119,14 @@ function createMenus(deps) {
           { label: 'Barra de direcciones', accelerator: 'CmdOrCtrl+L', click: () => act('focus-address') },
           { label: 'Enfocar barra de direcciones', accelerator: 'F6', click: () => act('focus-address') },
           { label: 'Barra lateral', accelerator: 'CmdOrCtrl+Shift+B', click: () => act('toggle-sidebar') },
+          { label: 'Buscar pestañas', accelerator: 'CmdOrCtrl+Shift+A', click: () => act('open-tab-search') },
           { label: 'Modo presentación', click: () => act('toggle-presentation') },
           { label: 'Herramientas de desarrollo', accelerator: 'F12', click: () => { const w = wc(); if (w) w.openDevTools() } },
           { type: 'separator' },
           { label: 'Copiar URL', accelerator: 'CmdOrCtrl+Shift+L', click: () => act('copy-url') },
           { label: 'Ver código fuente', accelerator: 'CmdOrCtrl+U', click: () => act('view-source') },
+          { label: 'Traducir página', click: () => act('translate-page') },
+          { label: 'Instalar sitio como acceso directo', click: () => act('install-site') },
           { label: 'Silenciar pestaña', accelerator: 'CmdOrCtrl+M', click: () => act('toggle-mute') },
           { type: 'separator' },
           { label: 'Modo lectura', accelerator: 'CmdOrCtrl+Shift+M', click: async () => { const w = wc(); const id = await extractReader(w); if (id) act('open-reader', id) } },
@@ -175,12 +210,14 @@ function createMenus(deps) {
         ],
       },
     ]
+    const translate = (items) => items.forEach((i) => { if (i.label) i.label = tr(i.label); if (i.submenu) translate(i.submenu) })
+    translate(template)
     Menu.setApplicationMenu(Menu.buildFromTemplate(template))
   }
 
   function showContentMenu(ctx, wc, params) {
     const template = []
-  if (params.linkURL) {
+    if (params.linkURL) {
     template.push({ label: 'Abrir enlace en pestaña nueva', click: () => sendUi(ctx, 'open-tab', params.linkURL) })
     template.push({ label: 'Abrir enlace en pestaña de fondo', click: () => sendUi(ctx, 'open-tab-bg', params.linkURL) })
     template.push({ label: 'Abrir enlace en ventana de incógnito', click: () => { const c2 = createWindow({ incognito: true }); setTimeout(() => sendUi(c2, 'open-tab', params.linkURL), 900) } })

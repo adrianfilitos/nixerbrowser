@@ -4,6 +4,7 @@ const path = require('path')
 
 const BLOCKLIST_URL = 'https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts'
 const YOYO_URL = 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&mimetype=plaintext'
+const OPENPHISH_URL = 'https://openphish.com/feed.txt'
 
 // Patrones de anuncios / ad-tech (se aplican a subrecursos, no a la página principal)
 const AD_PATTERNS = [
@@ -155,13 +156,29 @@ function fetchHosts(url) {
   })
 }
 
+function fetchUrlHosts(url) {
+  return net.fetch(url, { cache: 'no-store' }).then((res) => {
+    if (!res.ok) throw new Error('http ' + res.status)
+    return res.text()
+  }).then((text) => {
+    const list = []
+    for (const line of text.split(/\r?\n/)) {
+      const l = line.trim()
+      if (!l || !/^https?:\/\//.test(l)) continue
+      try { list.push(new URL(l).hostname) } catch {}
+    }
+    return list
+  })
+}
+
 function refresh() {
   Promise.all([
     fetchHosts(BLOCKLIST_URL),
     fetchHosts(YOYO_URL).catch(() => []),
+    fetchUrlHosts(OPENPHISH_URL).catch(() => []),
   ])
-    .then(([a, b]) => {
-      const list = [...a, ...b]
+    .then(([a, b, c]) => {
+      const list = [...a, ...b, ...c]
       domains = new Set()
       suffixes = new Set()
       addList(list)

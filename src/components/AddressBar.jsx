@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 
+const SITE_SHORTCUTS = [
+  { key: 'g', name: 'Google', tpl: 'https://www.google.com/search?q={q}' },
+  { key: 'ddg', name: 'DuckDuckGo', tpl: 'https://duckduckgo.com/?q={q}' },
+  { key: 'yt', name: 'YouTube', tpl: 'https://www.youtube.com/results?search_query={q}' },
+  { key: 'w', name: 'Wikipedia', tpl: 'https://es.wikipedia.org/w/index.php?search={q}' },
+  { key: 'gh', name: 'GitHub', tpl: 'https://github.com/search?q={q}' },
+  { key: 'x', name: 'X', tpl: 'https://x.com/search?q={q}' },
+  { key: 'maps', name: 'Google Maps', tpl: 'https://www.google.com/maps/search/{q}' },
+  { key: 'img', name: 'Imágenes', tpl: 'https://www.google.com/search?tbm=isch&q={q}' },
+  { key: 'sh', name: 'Compras', tpl: 'https://www.google.com/search?tbm=shop&q={q}' },
+]
+
 const INTERNAL_LABELS = {
   newtab: 'Nueva pestaña',
   history: 'Historial',
@@ -118,6 +130,12 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
       if (cs) extra.push(cs)
       const cv = convSuggestion(q2)
       if (cv && (!cs || cv.url !== cs.url)) extra.push(cv)
+      if (q2.startsWith('@')) {
+        const tok = q2.slice(1).split(/\s+/)[0].toLowerCase()
+        SITE_SHORTCUTS.filter((s) => s.key.startsWith(tok)).slice(0, 4).forEach((s) => {
+          extra.push({ type: 'search', title: '@' + s.key + ' — buscar en ' + s.name, url: s.tpl.replace('{q}', '') })
+        })
+      }
       let recents = []
       try { recents = await window.api.searchRecent(q2) } catch {}
       if (recents.length) {
@@ -230,6 +248,20 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
     if (suggestions[selected]) {
       pick(suggestions[selected])
       return
+    }
+    if (raw.startsWith('@')) {
+      const parts = raw.slice(1).split(/\s+/)
+      const key = (parts[0] || '').toLowerCase()
+      const query = raw.slice(1 + key.length).trim()
+      const sc = SITE_SHORTCUTS.find((s) => s.key === key)
+      if (sc) {
+        const target = sc.tpl.replace('{q}', encodeURIComponent(query))
+        setOpen(false)
+        if (e.altKey) { window.api.openNewTab(target); if (inputRef.current) inputRef.current.blur(); return }
+        onNavigate(target)
+        if (inputRef.current) inputRef.current.blur()
+        return
+      }
     }
     let target = resolveTarget(raw)
     if (!target && e.ctrlKey && /^[\w-]+$/.test(raw)) target = 'https://' + raw + '.com'
