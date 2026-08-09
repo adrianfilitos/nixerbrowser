@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; object-src 'none'" />
+    <title>Incógnito</title>
+    <style>
+      :root { --bg:#0e0f14; --text:#e9e9ee; --dim:#9c9ca6; --faint:#6c6c76; --accent:#6c7bff; }
+      * { box-sizing:border-box; margin:0; padding:0; }
+      body { min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg); color:var(--text); font-family:system-ui,"Segoe UI",sans-serif; }
+      .box { width:620px; text-align:center; padding:24px; }
+      .ico { width:64px; height:64px; border-radius:50%; background:rgba(108,123,255,.15); color:var(--accent); display:flex; align-items:center; justify-content:center; margin:0 auto 20px; }
+      h1 { font-size:24px; font-weight:700; margin-bottom:10px; }
+      .sub { color:var(--dim); font-size:14px; line-height:1.6; margin-bottom:30px; }
+      .search-wrap { position:relative; }
+      .search-wrap input {
+        width:100%; padding:15px 22px; font-size:16px; border-radius:28px;
+        border:1px solid #26272e; background:#17181f; color:#fff; outline:none;
+        box-shadow:0 6px 24px rgba(0,0,0,.4);
+      }
+      .search-wrap input:focus { border-color:var(--accent); }
+      .suggest-box { display:none; position:absolute; top:54px; left:0; right:0; background:#17181f; border:1px solid #26272e; border-radius:12px; overflow:hidden; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,.45); z-index:20; }
+      .suggest-item { display:flex; align-items:center; gap:10px; padding:10px 16px; font-size:13px; cursor:pointer; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .suggest-item .s-ico { width:16px; height:16px; flex-shrink:0; color:var(--faint); display:flex; align-items:center; justify-content:center; }
+      .suggest-item:hover, .suggest-item.active { background:rgba(108,123,255,.16); }
+      .note { margin-top:34px; display:flex; align-items:center; justify-content:center; gap:10px; color:var(--faint); font-size:12px; }
+      .pill { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:99px; border:1px solid #26272e; color:var(--dim); font-size:11px; }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <div class="ico">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 16v-4M12 8h.01" />
+        </svg>
+      </div>
+      <h1>Ventana de incógnito</h1>
+      <div class="sub">Tu actividad en esta ventana <b>no se guarda</b>: no quedará en el historial, las cookies ni la sesión. Al cerrarla, se borra todo.</div>
+      <div class="search-wrap">
+        <input id="q" type="text" placeholder="Buscar o escribir una dirección" autofocus />
+        <div class="suggest-box" id="sugBox"></div>
+      </div>
+      <div class="note">
+        <span class="pill">Sin historial</span>
+        <span class="pill">Sin cookies persistentes</span>
+        <span class="pill">Sin sesión guardada</span>
+      </div>
+    </div>
+    <script>
+      var sugBox = document.getElementById('sugBox')
+      var sugItems = []
+      var sugSel = -1
+      var sugTimer = null
+
+      function search(v) {
+        v = String(v || '').trim()
+        if (!v) return
+        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(v)) { location.href = v; return }
+        if (/^localhost(:\d+)?(\/.*)?$/.test(v)) { location.href = 'http://' + v; return }
+        if (/^[\w-]+(\.[\w-]+)+([/:?#].*)?$/.test(v)) { location.href = 'https://' + v; return }
+        browserAPI.search.url(v).then(function (u) { location.href = u })
+      }
+
+      function hideSug() { sugBox.innerHTML = ''; sugBox.style.display = 'none'; sugItems = []; sugSel = -1 }
+
+      function selectSug(i) {
+        sugSel = i
+        Array.prototype.forEach.call(sugBox.children, function (c, j) { c.classList.toggle('active', j === i) })
+      }
+
+      function openSug(list) {
+        sugItems = list
+        sugBox.innerHTML = ''
+        if (!list || !list.length) { sugBox.style.display = 'none'; return }
+        list.forEach(function (s, i) {
+          var it = document.createElement('div')
+          it.className = 'suggest-item' + (i === 0 ? ' active' : '')
+          it.innerHTML = '<span class="s-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span><span></span>'
+          it.querySelector('span:last-child').textContent = s
+          it.onmousedown = function (e) { e.preventDefault(); search(s); hideSug() }
+          it.onmouseenter = function () { selectSug(i) }
+          sugBox.appendChild(it)
+        })
+        sugBox.style.display = 'block'
+      }
+
+      var q = document.getElementById('q')
+      q.addEventListener('input', function () {
+        var v = this.value.trim()
+        clearTimeout(sugTimer)
+        if (v.length < 2) { hideSug(); return }
+        sugTimer = setTimeout(function () { browserAPI.search.suggest(v).then(function (list) { openSug(list || []) }) }, 120)
+      })
+      q.addEventListener('keydown', function (e) {
+        if (sugItems.length) {
+          if (e.key === 'ArrowDown') { e.preventDefault(); selectSug((sugSel + 1) % sugItems.length); return }
+          if (e.key === 'ArrowUp') { e.preventDefault(); selectSug((sugSel - 1 + sugItems.length) % sugItems.length); return }
+          if (e.key === 'Tab' && sugSel >= 0) { e.preventDefault(); this.value = sugItems[sugSel]; hideSug(); return }
+          if (e.key === 'Enter') { e.preventDefault(); if (sugSel >= 0) { search(sugItems[sugSel]); hideSug(); return } search(this.value); return }
+        }
+        if (e.key === 'Enter') { e.preventDefault(); search(this.value) }
+        if (e.key === 'Escape') hideSug()
+      })
+      q.addEventListener('blur', function () { setTimeout(hideSug, 150) })
+    </script>
+  </body>
+</html>

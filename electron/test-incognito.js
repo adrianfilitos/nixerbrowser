@@ -62,7 +62,7 @@ app.whenReady().then(async () => {
   )
   console.log('STEP5 wvstate done')
   const results = {
-    schemeOk: typeof wvState === 'object' && typeof wvState.url === 'string' && wvState.url.indexOf('nixer://') === 0 && typeof wvState.title === 'string' && wvState.title.length > 0,
+    schemeOk: typeof wvState === 'object' && typeof wvState.url === 'string' && wvState.url.indexOf('nixer://incognito') === 0 && typeof wvState.title === 'string' && wvState.title.indexOf('Incógnito') !== -1,
     badge: typeof wvState === 'object' && wvState.badge === true,
   }
 

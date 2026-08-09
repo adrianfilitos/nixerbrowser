@@ -9,6 +9,7 @@ const INTERNAL_LABELS = {
   ai: 'Asistente IA',
   reader: 'Modo lectura',
   welcome: 'Bienvenida',
+  incognito: 'Incógnito',
 }
 
 export default function AddressBar({ url, internalKey, focusSignal, navState, onNavigate, onNavAction, onOverlayChange = () => {}, onShields, onSiteInfo }) {

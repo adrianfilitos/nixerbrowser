@@ -35,6 +35,7 @@ const PAGE_TITLES = {
   extensions: 'Extensiones',
   about: 'Acerca de Nixer',
   warning: 'Aviso de seguridad',
+  incognito: 'Incógnito',
 }
 
 let tabSeq = 1
@@ -122,6 +123,7 @@ export default function App() {
 
   function computeSrc(url) {
     if (url) return url
+    if (incognitoRef.current) return 'nixer://incognito'
     if (urlOverrides.newtab) return urlOverrides.newtab
     if (settingsRef.current && settingsRef.current.profileCreated) return viewInfoRef.current.newtab
     return viewInfoRef.current.welcome
