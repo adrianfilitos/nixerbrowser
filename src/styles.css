@@ -232,6 +232,12 @@ webview.page-view.active {
   height: 38px;
   padding: 5px 0 0 8px;
   gap: 3px;
+}
+
+.tab-strip-drag {
+  align-self: stretch;
+  flex: 0 1 220px;
+  min-width: 32px;
   -webkit-app-region: drag;
 }
 
@@ -2123,7 +2129,7 @@ webview.page-view.active {
 .menu-btn { transition: background 0.12s ease; border-radius: 9px; }
 .menu-btn:hover { background: var(--bg3); }
 
-/* Cómodo: más aire y redondeo general */
+/* Cï¿½modo: mï¿½s aire y redondeo general */
 :root {
   --radius: 10px;
   --radius-lg: 14px;

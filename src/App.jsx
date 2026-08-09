@@ -259,7 +259,10 @@ export default function App() {
       muted: false,
     }
     setTabs((prev) => prev.map((t) => ({ ...t, active: false })).concat(tab))
-    if (opts.activate !== false) requestAnimationFrame(() => activate(id))
+    if (opts.activate !== false) {
+      requestAnimationFrame(() => activate(id))
+      if (!url) setFocusSignal((s) => s + 1)
+    }
     scheduleSessionSave()
     return id
   }

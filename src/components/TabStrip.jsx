@@ -237,6 +237,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
           </button>
         )}
       </div>
+      <div className="tab-strip-drag" />
       <div className="tab-manage-wrap">
           <button className={'tab-manage' + (manageOpen ? ' active' : '')} title="Manejar pestañas" onClick={() => setManageOpen((o) => !o)}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
