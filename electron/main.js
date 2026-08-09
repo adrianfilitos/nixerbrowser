@@ -632,23 +632,86 @@ function registerIpc() {
   ipcMain.on('content-scripts', (e, payload) => {
     e.sender.send('content-scripts-result', store.contentScriptsFor((payload && payload.url) || ''))
   })
-  ipcMain.handle('extensions:list', () => store.listExtensions())
+  ipcMain.handle('extensions:list', () => {
+    const sesExts = session.defaultSession.getAllExtensions()
+    return store.listExtensions().map((rec) => {
+      const sesExt = sesExts.find((e) => e.id === rec.id || (rec.folder && e.path === rec.folder)) || null
+      let icon = null
+      let optionsUrl = null
+      let homepage = null
+      let manifest = null
+      try { manifest = JSON.parse(fs.readFileSync(path.join(rec.folder, 'manifest.json'), 'utf8')) } catch {}
+      if (manifest) {
+        const icons = manifest.icons || {}
+        const size = ['128', '48', '32', '16'].find((s) => icons[s]) || Object.keys(icons)[0]
+        if (size && icons[size]) {
+          try {
+            const p = path.join(rec.folder, icons[size])
+            const ext = path.extname(p).toLowerCase()
+            const mime = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
+            icon = 'data:' + mime + ';base64,' + fs.readFileSync(p).toString('base64')
+          } catch {}
+        }
+        if (manifest.options_page) optionsUrl = manifest.options_page
+        else if (manifest.options_ui && manifest.options_ui.page) optionsUrl = manifest.options_ui.page
+        homepage = manifest.homepage_url || null
+      }
+      return {
+        id: rec.id,
+        name: rec.name,
+        version: rec.version,
+        enabled: !!rec.enabled,
+        contentScripts: (rec.contentScripts || []).length,
+        folder: rec.folder || null,
+        icon,
+        optionsUrl,
+        homepage,
+        extensionId: sesExt ? sesExt.id : null,
+      }
+    })
+  })
   ipcMain.handle('extensions:remove', async (_e, id) => {
     const ext = store.listExtensions().find((x) => x.id === id)
-    if (ext && ext.id) {
-      try { session.defaultSession.removeExtension(ext.id) } catch {}
+    const sesExt = ext && session.defaultSession.getAllExtensions().find((e) => e.id === ext.id || (ext.folder && e.path === ext.folder))
+    if (sesExt) {
+      try { session.defaultSession.removeExtension(sesExt.id) } catch {}
     }
     store.removeExtension(id)
   })
   ipcMain.handle('extensions:set-enabled', async (_e, id, enabled) => {
     const ext = store.listExtensions().find((x) => x.id === id)
-    if (ext && ext.folder) {
+    if (ext) {
       try {
         if (enabled) await session.defaultSession.loadExtension(ext.folder)
-        else session.defaultSession.removeExtension(ext.id)
+        else {
+          const sesExt = session.defaultSession.getAllExtensions().find((e) => e.id === ext.id || (ext.folder && e.path === ext.folder))
+          if (sesExt) session.defaultSession.removeExtension(sesExt.id)
+        }
       } catch {}
     }
     store.setExtensionEnabled(id, enabled)
+  })
+  ipcMain.handle('extensions:open-options', (_e, id) => {
+    const ext = store.listExtensions().find((x) => x.id === id)
+    if (!ext) return false
+    let manifest = null
+    try { manifest = JSON.parse(fs.readFileSync(path.join(ext.folder, 'manifest.json'), 'utf8')) } catch {}
+    const page = manifest && (manifest.options_page || (manifest.options_ui && manifest.options_ui.page))
+    if (!page) return false
+    const sesExt = session.defaultSession.getAllExtensions().find((e) => e.id === ext.id || (ext.folder && e.path === ext.folder))
+    const c = currentCtx()
+    if (sesExt && c) { sendUi(c, 'open-tab', 'chrome-extension://' + sesExt.id + '/' + page); return true }
+    return false
+  })
+  ipcMain.handle('extensions:open-homepage', (_e, id) => {
+    const ext = store.listExtensions().find((x) => x.id === id)
+    if (!ext) return false
+    let manifest = null
+    try { manifest = JSON.parse(fs.readFileSync(path.join(ext.folder, 'manifest.json'), 'utf8')) } catch {}
+    if (!manifest || !manifest.homepage_url) return false
+    const c = currentCtx()
+    if (c) { sendUi(c, 'open-tab', manifest.homepage_url); return true }
+    return false
   })
   ipcMain.handle('extensions:load', async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender)

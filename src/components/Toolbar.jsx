@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import NavButtons from './NavButtons.jsx'
 import AddressBar from './AddressBar.jsx'
+import ExtensionsMenu from './ExtensionsMenu.jsx'
 import { I } from './icons.jsx'
 
 export default function Toolbar({
@@ -83,6 +84,7 @@ export default function Toolbar({
         {inProgressCount > 0 && <span className="badge">{inProgressCount}</span>}
       </button>
       <browser-action-list className="ext-actions" />
+      <ExtensionsMenu onOpenPage={onOpenPage} />
       <div className="menu-wrap" ref={menuRef}>
         <button className="menu-btn" title="Menú" onClick={() => setMenuOpen((o) => !o)}>
           <span className="menu-avatar" style={{ background: profileColor || 'var(--accent)' }}>

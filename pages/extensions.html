@@ -5,86 +5,189 @@
     <title>Extensiones</title>
     <style>
       :root { --bg:#151518; --bg2:#1c1c20; --bg3:#26262c; --border:#2e2e35; --text:#e9e9ee; --dim:#9c9ca6; --faint:#6c6c76; --accent:#6c7bff; --danger:#e05252; }
-      :root.light { --bg:#f2f3f7; --bg2:#ffffff; --bg3:#ececf2; --border:#d9dae2; --text:#191a1f; --dim:#54555e; --faint:#7a7b85; --accent:#4a5ae0; }
+      :root.light { --bg:#f2f3f7; --bg2:#ffffff; --bg3:#ececf2; --border:#d9dae2; --text:#191a1f; --dim:#54555e; --faint:#7a7b85; --accent:#4a5ae0; --danger:#d23b3b; }
       * { box-sizing:border-box; margin:0; padding:0; }
       body { font-family:system-ui,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
-      header { display:flex; align-items:center; gap:14px; padding:16px 24px; border-bottom:1px solid var(--border); background:var(--bg2); }
-      h1 { font-size:20px; font-weight:600; }
-      button { padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--bg3); color:var(--text); cursor:pointer; font-size:13px; }
-      button:hover { filter:brightness(1.12); }
-      main { max-width:760px; margin:0 auto; padding:16px 24px; }
-      .row { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; }
-      .row:hover { background:var(--bg3); }
-      .ext-icon { width:38px; height:38px; flex-shrink:0; border-radius:10px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:16px; }
-      .info { flex:1; min-width:0; }
-      .info b { display:block; }
-      .info span { color:var(--faint); font-size:12px; }
-      .switch { width:38px; height:20px; border-radius:10px; border:none; background:var(--bg3); position:relative; cursor:pointer; }
+      header { position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:14px; padding:13px 24px; border-bottom:1px solid var(--border); background:var(--bg2); flex-wrap:wrap; }
+      h1 { font-size:18px; font-weight:700; }
+      .search { position:relative; flex:1; max-width:360px; min-width:180px; }
+      .search svg { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--faint); }
+      .search input { width:100%; padding:9px 12px 9px 34px; border-radius:9px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:13px; outline:none; }
+      .search input:focus { border-color:var(--accent); }
+      .btn { padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--bg3); color:var(--text); cursor:pointer; font-size:13px; white-space:nowrap; }
+      .btn:hover { filter:brightness(1.12); }
+      .btn.ghost { background:transparent; color:var(--dim); }
+      .btn.ghost:hover { background:var(--bg3); color:var(--text); }
+      main { max-width:900px; margin:0 auto; padding:18px 24px 48px; }
+      .store { padding:14px 16px; border:1px solid var(--border); border-radius:12px; background:var(--bg2); margin-bottom:16px; }
+      .store h2 { font-size:14px; margin-bottom:10px; color:var(--dim); }
+      .store-row { display:flex; gap:8px; }
+      .store-row input { flex:1; min-width:0; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:13px; outline:none; }
+      .store-row input:focus { border-color:var(--accent); }
+      #storeResult { margin-top:8px; font-size:12px; color:var(--faint); }
+      .toolbar-line { display:flex; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+      .toolbar-line .count { color:var(--faint); font-size:13px; margin-right:auto; }
+      .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; }
+      .card { display:flex; flex-direction:column; gap:10px; padding:14px; border:1px solid var(--border); border-radius:12px; background:var(--bg2); }
+      .card-top { display:flex; align-items:center; gap:12px; }
+      .ext-icon { width:40px; height:40px; flex-shrink:0; border-radius:10px; background:var(--bg3); object-fit:contain; }
+      .ext-icon.placeholder { display:flex; align-items:center; justify-content:center; font-weight:700; font-size:17px; color:var(--text); background:var(--accent); }
+      .ext-title { flex:1; min-width:0; }
+      .ext-title b { display:block; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .ext-title span { color:var(--faint); font-size:12px; }
+      .card-meta { color:var(--faint); font-size:12px; }
+      .card-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+      .card-actions .spacer { flex:1; }
+      .switch { width:38px; height:20px; border-radius:10px; border:none; background:var(--bg3); position:relative; cursor:pointer; flex-shrink:0; }
       .switch.on { background:var(--accent); }
       .switch .knob { position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; transition:transform .15s; }
       .switch.on .knob { transform:translateX(18px); }
-      .del { background:transparent; border:none; color:var(--dim); }
-      .del:hover { color:var(--danger); }
-      .empty { color:var(--faint); text-align:center; padding:40px 0; line-height:1.8; }
-      .load { margin-top:16px; }
+      .small { padding:5px 10px; border-radius:7px; border:1px solid var(--border); background:var(--bg3); color:var(--text); font-size:12px; cursor:pointer; }
+      .small:hover { filter:brightness(1.12); }
+      .small.danger { color:var(--danger); }
+      .empty { color:var(--faint); text-align:center; padding:48px 0; line-height:1.8; }
+      .hint { color:var(--faint); font-size:12px; line-height:1.6; margin-top:20px; }
+      .hint code { background:var(--bg3); border:1px solid var(--border); border-radius:5px; padding:1px 5px; font-size:11px; }
+      .no-results { display:none; color:var(--faint); text-align:center; padding:40px 0; }
+      #toast { position:fixed; bottom:18px; right:18px; background:var(--bg2); border:1px solid var(--border); color:var(--text); padding:10px 16px; border-radius:10px; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,.4); opacity:0; transform:translateY(8px); transition:.18s; pointer-events:none; z-index:50; }
+      #toast.show { opacity:1; transform:none; }
     </style>
   </head>
   <body>
     <header>
       <h1>Extensiones</h1>
-      <button id="load">Cargar carpeta…</button>
-    </header>
-    <main id="main">
-      <div class="store" style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);margin-bottom:14px">
-        <h2 style="font-size:14px;margin-bottom:8px;color:var(--dim)">Instalar desde Chrome Web Store</h2>
-        <div style="display:flex;gap:8px">
-          <input id="storeUrl" placeholder="Pega el ID o la URL de la extensión (ej. https://chromewebstore.google.com/detail/…)…" style="flex:1;min-width:0;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;outline:none" />
-          <button id="install">Instalar</button>
-        </div>
-        <div id="storeResult" style="margin-top:8px;font-size:12px;color:var(--faint)"></div>
+      <div class="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="search" type="text" placeholder="Buscar extensión…" autocomplete="off" spellcheck="false" />
       </div>
-      <div id="list"></div>
-      <div class="load">
-        <p class="empty" style="padding:8px 0;text-align:left">Una extensión es una carpeta con un <code>manifest.json</code> que define <code>content_scripts</code>. Al instalar desde el almacén se descarga el <code>.crx</code> y se desempaqueta. Solo funcionan las extensiones basadas en content scripts simples (la API <code>chrome.*</code> completa no está implementada).</p>
+      <button class="btn ghost" id="enableAll">Activar todas</button>
+      <button class="btn ghost" id="disableAll">Desactivar todas</button>
+      <button class="btn" id="load">Cargar carpeta…</button>
+    </header>
+    <main>
+      <div class="store">
+        <h2>Instalar desde Chrome Web Store</h2>
+        <div class="store-row">
+          <input id="storeUrl" placeholder="Pega el ID o la URL de la extensión (ej. https://chromewebstore.google.com/detail/…)…" />
+          <button class="btn" id="install">Instalar</button>
+        </div>
+        <div id="storeResult"></div>
+      </div>
+
+      <div class="toolbar-line">
+        <span class="count" id="count">…</span>
+      </div>
+      <div class="grid" id="list"></div>
+      <div class="empty" id="empty" style="display:none">No hay extensiones instaladas.</div>
+      <div class="no-results" id="noResults">Sin resultados.</div>
+      <div class="hint">
+        Una extensión es una carpeta con un <code>manifest.json</code> que define <code>content_scripts</code>.
+        Al instalar desde el almacén se descarga el <code>.crx</code> y se desempaqueta. Solo funcionan las extensiones
+        basadas en content scripts simples y acciones de barra (la API <code>chrome.*</code> completa no está implementada).
       </div>
     </main>
+    <div id="toast"></div>
     <script>
       var list = document.getElementById('list')
+      var items = []
+      var toastTimer
+
+      function toast(msg) {
+        var t = document.getElementById('toast')
+        t.textContent = msg
+        t.classList.add('show')
+        clearTimeout(toastTimer)
+        toastTimer = setTimeout(function () { t.classList.remove('show') }, 1800)
+      }
+
+      function copy(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { toast('ID copiado') }).catch(function () { fallbackCopy(text) })
+        } else fallbackCopy(text)
+      }
+      function fallbackCopy(text) {
+        var ta = document.createElement('textarea')
+        ta.value = text
+        document.body.appendChild(ta)
+        ta.select()
+        try { document.execCommand('copy'); toast('ID copiado') } catch (e) {}
+        document.body.removeChild(ta)
+      }
+
+      function applyFilter() {
+        var q = document.getElementById('search').value.trim().toLowerCase()
+        var any = false
+        items.forEach(function (e) {
+          var hit = !q || e.name.toLowerCase().indexOf(q) !== -1 || String(e.id).toLowerCase().indexOf(q) !== -1
+          var card = document.getElementById('card-' + e.id)
+          if (card) card.style.display = hit ? '' : 'none'
+          if (hit) any = true
+        })
+        document.getElementById('noResults').style.display = any ? 'none' : ''
+      }
 
       function render() {
-        browserAPI.extensions.list().then(function (items) {
+        browserAPI.extensions.list().then(function (arr) {
+          items = arr
           list.innerHTML = ''
-          if (!items.length) { list.innerHTML = '<div class="empty">No hay extensiones instaladas</div>'; return }
-          items.forEach(function (e) {
-            var row = document.createElement('div')
-            row.className = 'row'
-            row.innerHTML =
-              '<span class="ext-icon"></span>' +
-              '<span class="info"><b></b><span></span></span>' +
-              '<button class="switch"></button>' +
-              '<button class="del">Quitar</button>'
-            row.querySelector('.ext-icon').textContent = (e.name || 'E').slice(0, 1).toUpperCase()
-            row.querySelector('.info b').textContent = e.name + ' ' + (e.version || '')
-            row.querySelector('.info span').textContent = (e.contentScripts || []).length + ' content script(s)'
-            var sw = row.querySelector('.switch')
+          var enabled = arr.filter(function (e) { return e.enabled }).length
+          document.getElementById('count').textContent = arr.length + ' instalada' + (arr.length === 1 ? '' : 's') + ' · ' + enabled + ' activa' + (enabled === 1 ? '' : 's')
+          document.getElementById('empty').style.display = arr.length ? 'none' : ''
+          arr.forEach(function (e) {
+            var card = document.createElement('div')
+            card.className = 'card'
+            card.id = 'card-' + e.id
+            card.innerHTML =
+              '<div class="card-top">' +
+                (e.icon
+                  ? '<img class="ext-icon" src="' + e.icon + '" alt="" />'
+                  : '<span class="ext-icon placeholder">' + (e.name || 'E').slice(0, 1).toUpperCase() + '</span>') +
+                '<div class="ext-title"><b></b><span></span></div>' +
+              '</div>' +
+              '<div class="card-meta">' + (e.contentScripts || 0) + ' content script(s) · ' + e.id.slice(0, 10) + '…</div>' +
+              '<div class="card-actions">' +
+                '<button class="small" data-a="options" style="display:none">Opciones</button>' +
+                '<button class="small" data-a="home" style="display:none">Sitio web</button>' +
+                '<button class="small" data-a="copy">Copiar ID</button>' +
+                '<span class="spacer"></span>' +
+                '<button class="small danger" data-a="del">Quitar</button>' +
+                '<button class="switch" data-a="sw"><span class="knob"></span></button>' +
+              '</div>'
+            card.querySelector('.ext-title b').textContent = e.name + ' ' + (e.version || '')
+            card.querySelector('.ext-title span').textContent = e.extensionId ? 'cargada' : 'desactivada'
+            var sw = card.querySelector('[data-a="sw"]')
             sw.classList.toggle('on', !!e.enabled)
-            sw.innerHTML = '<span class="knob"></span>'
             sw.onclick = function () {
-              var next = !e.enabled
-              browserAPI.extensions.setEnabled(e.id, next).then(render)
+              browserAPI.extensions.setEnabled(e.id, !e.enabled).then(render)
             }
-            row.querySelector('.del').onclick = async function () {
+            var opt = card.querySelector('[data-a="options"]')
+            if (e.optionsUrl) {
+              opt.style.display = ''
+              opt.onclick = function () { browserAPI.extensions.openOptions(e.id) }
+            }
+            var home = card.querySelector('[data-a="home"]')
+            if (e.homepage) {
+              home.style.display = ''
+              home.onclick = function () { browserAPI.extensions.openHomepage(e.id) }
+            }
+            card.querySelector('[data-a="copy"]').onclick = function () { copy(e.id) }
+            card.querySelector('[data-a="del"]').onclick = async function () {
+              if (!confirm('¿Quitar ' + e.name + '?')) return
               await browserAPI.extensions.remove(e.id)
+              toast(e.name + ' eliminada')
               render()
             }
-            list.appendChild(row)
+            list.appendChild(card)
           })
+          applyFilter()
         })
       }
 
+      document.getElementById('search').addEventListener('input', applyFilter)
       document.getElementById('load').onclick = async function () {
         var res = await browserAPI.extensions.load()
         if (res && res.error) alert('Error: ' + res.error)
+        else if (res) toast('Extensión cargada')
         render()
       }
       document.getElementById('install').onclick = async function () {
@@ -95,9 +198,22 @@
         this.disabled = true
         var r = await browserAPI.extensions.installStore(val)
         this.disabled = false
-        if (r && r.error) res.textContent = 'Error: ' + r.error
-        else res.textContent = r ? 'Instalada: ' + r.name + ' ' + (r.version || '') : 'No instalada'
+        if (r && r.error) { res.textContent = 'Error: ' + r.error; toast('Error al instalar') }
+        else {
+          res.textContent = r ? 'Instalada: ' + r.name + ' ' + (r.version || '') : 'No instalada'
+          toast('Extensión instalada')
+        }
         document.getElementById('storeUrl').value = ''
+        render()
+      }
+      document.getElementById('enableAll').onclick = async function () {
+        for (var i = 0; i < items.length; i++) if (!items[i].enabled) await browserAPI.extensions.setEnabled(items[i].id, true)
+        toast('Todas activadas')
+        render()
+      }
+      document.getElementById('disableAll').onclick = async function () {
+        for (var i = 0; i < items.length; i++) if (items[i].enabled) await browserAPI.extensions.setEnabled(items[i].id, false)
+        toast('Todas desactivadas')
         render()
       }
       render()

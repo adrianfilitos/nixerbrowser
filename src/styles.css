@@ -1153,6 +1153,144 @@ webview.page-view.active {
   border-radius: 6px;
 }
 
+.ext-menu-wrap {
+  position: relative;
+}
+
+.ext-menu-btn {
+  position: relative;
+}
+
+.ext-menu-btn .badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+}
+
+.ext-menu {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  width: 320px;
+  max-width: 92vw;
+  background: var(--pop-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 6px;
+  z-index: 200;
+  animation: toast-in 0.14s ease;
+}
+
+.ext-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.ext-menu-manage {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.ext-menu-manage:hover {
+  background: var(--bg3);
+}
+
+.ext-menu-empty {
+  color: var(--text-faint);
+  font-size: 12px;
+  padding: 14px 10px;
+  line-height: 1.5;
+}
+
+.ext-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 8px;
+}
+
+.ext-menu-item:hover {
+  background: var(--bg3);
+}
+
+.ext-menu-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.ext-menu-icon.placeholder {
+  background: var(--bg4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.ext-menu-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ext-menu-info b {
+  display: block;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ext-menu-info span {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.ext-menu-del {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.ext-menu-del:hover {
+  color: var(--danger);
+}
+
+.ext-menu-foot {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 6px;
+}
+
+.ext-menu-foot .btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 10px;
+  font-size: 13px;
+}
+
 .ext-actions::part(action):hover {
   background: var(--bg4);
 }

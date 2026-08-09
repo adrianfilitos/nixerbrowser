@@ -108,6 +108,8 @@ contextBridge.exposeInMainWorld('browserAPI', {
     setEnabled: (id, enabled) => ipcRenderer.invoke('extensions:set-enabled', id, enabled),
     load: () => ipcRenderer.invoke('extensions:load'),
     installStore: (storeId) => ipcRenderer.invoke('extensions:install-store', storeId),
+    openOptions: (id) => ipcRenderer.invoke('extensions:open-options', id),
+    openHomepage: (id) => ipcRenderer.invoke('extensions:open-homepage', id),
   },
   reader: {
     get: (id) => ipcRenderer.invoke('reader:get', id),

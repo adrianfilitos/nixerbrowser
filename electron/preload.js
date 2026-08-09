@@ -54,4 +54,8 @@ contextBridge.exposeInMainWorld('api', {
   savePassword: (cred) => ipcRenderer.send('password-save', cred),
   autofillForm: () => ipcRenderer.send('autofill-form'),
   onUi: (cb) => ipcRenderer.on('ui-action', (_e, action, data) => cb(action, data)),
+
+  extensionsList: () => ipcRenderer.invoke('extensions:list'),
+  extensionsSetEnabled: (id, enabled) => ipcRenderer.invoke('extensions:set-enabled', id, enabled),
+  extensionsRemove: (id) => ipcRenderer.invoke('extensions:remove', id),
 })
