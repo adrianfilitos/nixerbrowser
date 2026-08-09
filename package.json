@@ -19,6 +19,7 @@
     "test:shields": "electron electron/test-shields.js",
     "test:youtube": "electron electron/test-youtube.js",
     "test:uach": "electron electron/test-uach.js",
+    "test:google": "electron electron/test-google.js",
     "test:extensions": "electron electron/test-extensions.js",
     "test:newtab": "electron electron/test-newtab.js",
     "test:nixer": "electron electron/test-nixer.js",

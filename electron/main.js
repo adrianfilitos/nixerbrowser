@@ -877,7 +877,11 @@ app.on('web-contents-created', (_e, wc) => {
     if (c) ctx.sendUi(c, 'status-url', url || '')
   })
   wc.setWindowOpenHandler(({ url }) => {
-    if (store.settings().blockPopups) return { action: 'deny' }
+    if (store.settings().blockPopups) {
+      let host = ''
+      try { host = new URL(url).hostname } catch {}
+      if (host !== 'google.com' && !host.endsWith('.google.com')) return { action: 'deny' }
+    }
     const c = ctx.ctxForWc(wc)
     if (c && url) ctx.sendUi(c, 'open-tab', url)
     return { action: 'deny' }

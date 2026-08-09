@@ -33,6 +33,7 @@ function syncLoginItem() {
 
 const AUTO_ALLOW_PERMS = new Set(['fullscreen', 'clipboard-sanitized-write', 'pointerLock', 'openExternal', 'midiSysex'])
 const ASK_PERMS = new Set(['media', 'geolocation', 'notifications', 'clipboard-read', 'display-capture', 'keyboardLock', 'window-management', 'fileSystem'])
+const DENY_PERMS = new Set(['webAuthn'])
 const pendingPermits = new Map()
 let permId = 0
 
@@ -40,6 +41,7 @@ function permAllowed(origin, permission) {
   const s = store.settings()
   const rules = (s.sitePermissions && s.sitePermissions[origin]) || {}
   if (permission in rules) return rules[permission]
+  if (DENY_PERMS.has(permission)) return false
   if (AUTO_ALLOW_PERMS.has(permission)) return true
   if (ASK_PERMS.has(permission)) return null
   return false
