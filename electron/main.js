@@ -883,7 +883,7 @@ app.on('web-contents-created', (_e, wc) => {
   wc.on('dom-ready', () => {
     let host = ''
     try { host = new URL(wc.getURL()).hostname } catch {}
-    if (host !== 'chromewebstore.google.com') return
+    if (host !== 'chromewebstore.google.com' && host !== 'google.com' && !host.endsWith('.google.com')) return
     try {
       wc.executeJavaScript(`(() => {
         try {
@@ -928,7 +928,7 @@ app.whenReady().then(() => {
   try { session.fromPartition(PRIVATE_PARTITION).setAutoplayPolicy(ap) } catch {}
   system.syncLoginItem()
   for (const ses of [session.defaultSession, session.fromPartition(PRIVATE_PARTITION)]) {
-    ses.webRequest.onBeforeSendHeaders({ urls: ['*://chromewebstore.google.com/*'] }, (details, cb) => {
+    ses.webRequest.onBeforeSendHeaders({ urls: ['*://chromewebstore.google.com/*', '*://accounts.google.com/*', '*://google.com/*', '*://*.google.com/*', '*://*.googleapis.com/*'] }, (details, cb) => {
       cb({ requestHeaders: Object.assign({}, details.requestHeaders, CHROME_HINTS) })
     })
   }
