@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('api', {
   setSetting: (patch) => ipcRenderer.invoke('settings:set', patch),
   searchEngines: () => ipcRenderer.invoke('search:engines'),
   searchUrl: (q) => ipcRenderer.invoke('search:url', q),
+  searchSuggest: (q) => ipcRenderer.invoke('search:suggest', q),
   shieldsGet: (origin) => ipcRenderer.invoke('shields:get', origin),
   shieldsSet: (origin, patch) => ipcRenderer.invoke('shields:set', { origin, patch }),
   adblockRecent: () => ipcRenderer.invoke('adblock:recent'),

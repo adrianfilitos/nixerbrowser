@@ -3,13 +3,42 @@ import ContextMenu from './ContextMenu.jsx'
 import WindowControls from './WindowControls.jsx'
 import { I } from './icons.jsx'
 
-export default function TabStrip({ tabs, onNew, onSelect, onClose, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore }) {
+export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore }) {
   const [menu, setMenu] = useState(null)
+  const [manageOpen, setManageOpen] = useState(false)
   let dragId = null
 
   useEffect(() => {
-    onOverlayChange(!!menu)
-  }, [menu, onOverlayChange])
+    onOverlayChange(!!menu || manageOpen)
+  }, [menu, manageOpen, onOverlayChange])
+
+  useEffect(() => {
+    function close(e) {
+      if (!e.target.closest('.tab-manage, .tab-manage-menu')) setManageOpen(false)
+    }
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [])
+
+  const activeTab = tabs.find((t) => t.active)
+  const activeIdx = activeTab ? tabs.indexOf(activeTab) : -1
+
+  function closeOthers() {
+    tabs.forEach((t) => { if (!t.active) onClose(t.id) })
+    setManageOpen(false)
+  }
+
+  function closeToRight() {
+    if (activeIdx < 0) return
+    tabs.forEach((t, i) => { if (i > activeIdx) onClose(t.id) })
+    setManageOpen(false)
+  }
+
+  function closeAll() {
+    if (onCloseAll) onCloseAll()
+    else tabs.forEach((t) => onClose(t.id))
+    setManageOpen(false)
+  }
 
   function startDrag(e, id) {
     if (e.button !== 0) return
@@ -99,6 +128,39 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onPin, onReor
             <path d="M12 5v14M5 12h14" />
           </svg>
         </button>
+        <div className="tab-manage-wrap">
+          <button className={'tab-manage' + (manageOpen ? ' active' : '')} title="Manejar pestañas" onClick={() => setManageOpen((o) => !o)}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <path d="M3 9h18M9 9v11" />
+            </svg>
+          </button>
+          {manageOpen && (
+            <div className="tab-manage-menu">
+              <div className="tm-head">
+                <span>Pestañas ({tabs.length})</span>
+                <button className="tm-link" onClick={() => { setManageOpen(false); onNew() }}>+ Nueva</button>
+              </div>
+              <div className="tm-list">
+                {tabs.map((t) => (
+                  <div key={t.id} className={'tm-tab' + (t.active ? ' active' : '')} onClick={() => { setManageOpen(false); onSelect(t.id) }} title={t.title || 'Nueva pestaña'}>
+                    {t.favicon ? <img className="favicon" src={t.favicon} alt="" /> : <span className="favicon globe" />}
+                    <span className="tm-title">{t.title || 'Nueva pestaña'}</span>
+                    <button className="tm-close" title="Cerrar" onClick={(e) => { e.stopPropagation(); onClose(t.id) }}>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="tm-actions">
+                <button className="tm-action" onClick={() => { setManageOpen(false); onNew() }}>Nueva pestaña</button>
+                <button className="tm-action" onClick={closeOthers} disabled={tabs.length < 2}>Cerrar otras pestañas</button>
+                <button className="tm-action" onClick={closeToRight} disabled={activeIdx < 0 || activeIdx === tabs.length - 1}>Cerrar pestañas a la derecha</button>
+                <button className="tm-action danger" onClick={closeAll} disabled={tabs.length === 0}>Cerrar todas las pestañas</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
       <WindowControls maximized={maximized} />
       {menu && (

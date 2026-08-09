@@ -238,6 +238,15 @@ export default function App() {
     scheduleSessionSave()
   }
 
+  function closeAllTabs() {
+    tabs.forEach((t) => {
+      if (t.url && t.url.startsWith('http')) closedTabsRef.current.unshift({ url: t.url, title: t.title })
+    })
+    if (closedTabsRef.current.length > 50) closedTabsRef.current.length = 50
+    setTabs([createTabObject()])
+    scheduleSessionSave()
+  }
+
   function createTabObject() {
     const src = computeSrc('')
     const id = Date.now() + '-' + tabSeq++
@@ -537,6 +546,7 @@ export default function App() {
           onNew={() => addTab()}
           onSelect={switchTab}
           onClose={closeTab}
+          onCloseAll={closeAllTabs}
           onPin={(id) => setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t)))}
           onNewUrl={(url) => addTab(url)}
           onRestore={() => restoreTab()}

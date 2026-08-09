@@ -89,6 +89,7 @@ contextBridge.exposeInMainWorld('browserAPI', {
   search: {
     engines: () => ipcRenderer.invoke('search:engines'),
     url: (q) => ipcRenderer.invoke('search:url', q),
+    suggest: (q) => ipcRenderer.invoke('search:suggest', q),
   },
   ai: {
     chat: (messages) => ipcRenderer.invoke('ai:chat', messages),

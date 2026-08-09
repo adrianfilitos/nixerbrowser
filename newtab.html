@@ -25,6 +25,13 @@
       }
       :root.light input { background:#fff; color:#1a1a1a; border-color:#ccc; box-shadow:0 6px 24px rgba(0,0,0,.08); }
       input:focus { border-color:var(--accent); }
+      .search-wrap { position:relative; }
+      .search-wrap.hidden { display:none; }
+      .suggest-box { display:none; position:absolute; top:52px; left:0; right:0; background:#1d1d1d; border:1px solid #2a2a2a; border-radius:12px; overflow:hidden; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,.35); z-index:20; }
+      :root.light .suggest-box { background:#fff; border-color:#ddd; }
+      .suggest-item { display:flex; align-items:center; gap:10px; padding:10px 16px; font-size:13px; cursor:pointer; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .suggest-item .s-ico { width:16px; height:16px; flex-shrink:0; color:var(--faint); display:flex; align-items:center; justify-content:center; }
+      .suggest-item:hover, .suggest-item.active { background:rgba(108,123,255,.16); }
       .links { margin-top:26px; display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
       .link {
         display:flex; align-items:center; gap:10px; padding:10px 16px; border-radius:12px;
@@ -74,7 +81,10 @@
         <div class="clock"></div>
         <div class="date"></div>
       </div>
-      <input id="q" class="search" type="text" placeholder="Buscar o escribir una dirección" autofocus />
+      <div class="search-wrap" id="searchWrap">
+        <input id="q" class="search" type="text" placeholder="Buscar o escribir una dirección" autofocus />
+        <div class="suggest-box" id="sugBox"></div>
+      </div>
       <div class="links" id="links"></div>
       <div class="recent" id="recentBlock">
         <h3>Visitados recientemente</h3>
@@ -94,15 +104,75 @@
 
       document.getElementById('pencil').onclick = function () { location.href = 'nixer://settings#s-newtab' }
 
-      document.getElementById('q').addEventListener('keydown', function (e) {
-        if (e.key !== 'Enter') return
-        var v = e.target.value.trim()
+      var sugBox = document.getElementById('sugBox')
+      var sugItems = []
+      var sugSel = -1
+      var sugTimer = null
+
+      function search(v) {
+        v = String(v || '').trim()
         if (!v) return
         if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(v)) { location.href = v; return }
         if (/^localhost(:\d+)?(\/.*)?$/.test(v)) { location.href = 'http://' + v; return }
         if (/^[\w-]+(\.[\w-]+)+([/:?#].*)?$/.test(v)) { location.href = 'https://' + v; return }
         browserAPI.search.url(v).then(function (u) { location.href = u })
+      }
+
+      function hideSug() {
+        sugBox.innerHTML = ''
+        sugBox.style.display = 'none'
+        sugItems = []
+        sugSel = -1
+      }
+
+      function selectSug(i) {
+        sugSel = i
+        Array.prototype.forEach.call(sugBox.children, function (c, j) {
+          c.classList.toggle('active', j === i)
+        })
+      }
+
+      function openSug(list) {
+        sugItems = list
+        sugBox.innerHTML = ''
+        if (!list || !list.length) { sugBox.style.display = 'none'; return }
+        list.forEach(function (s, i) {
+          var it = document.createElement('div')
+          it.className = 'suggest-item' + (i === 0 ? ' active' : '')
+          it.innerHTML = '<span class="s-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span><span></span>'
+          it.querySelector('span:last-child').textContent = s
+          it.onmousedown = function (e) { e.preventDefault(); search(s); hideSug() }
+          it.onmouseenter = function () { selectSug(i) }
+          sugBox.appendChild(it)
+        })
+        sugBox.style.display = 'block'
+      }
+
+      var qInput = document.getElementById('q')
+      qInput.addEventListener('input', function () {
+        var v = this.value.trim()
+        clearTimeout(sugTimer)
+        if (v.length < 2) { hideSug(); return }
+        sugTimer = setTimeout(function () {
+          browserAPI.search.suggest(v).then(function (list) { openSug(list || []) })
+        }, 120)
       })
+      qInput.addEventListener('keydown', function (e) {
+        if (sugItems.length) {
+          if (e.key === 'ArrowDown') { e.preventDefault(); selectSug((sugSel + 1) % sugItems.length); return }
+          if (e.key === 'ArrowUp') { e.preventDefault(); selectSug((sugSel - 1 + sugItems.length) % sugItems.length); return }
+          if (e.key === 'Tab' && sugSel >= 0) { e.preventDefault(); this.value = sugItems[sugSel]; hideSug(); return }
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            if (sugSel >= 0) { search(sugItems[sugSel]); hideSug(); return }
+            search(this.value)
+            return
+          }
+        }
+        if (e.key === 'Enter') { e.preventDefault(); search(this.value) }
+        if (e.key === 'Escape') hideSug()
+      })
+      qInput.addEventListener('blur', function () { setTimeout(hideSug, 150) })
 
       function renderLinks(list) {
         var box = document.getElementById('links')
@@ -174,7 +244,7 @@
         else if (s.profileName) document.getElementById('greet').textContent = 'Hola, ' + s.profileName
 
         if (s.showClock === false) document.querySelector('.top').classList.add('hidden')
-        if (s.showSearch === false) document.getElementById('q').classList.add('hidden')
+        if (s.showSearch === false) document.getElementById('searchWrap').classList.add('hidden')
         if (s.showRecent === false) document.getElementById('recentBlock').classList.add('hidden')
 
         renderLinks(s.shortcuts)

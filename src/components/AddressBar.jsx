@@ -85,10 +85,35 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
       return
     }
     timerRef.current = setTimeout(async () => {
-      const res = await window.api.autocomplete(q)
-      setSuggestions(res)
+      const q2 = value.trim()
+      if (!q2) {
+        setSuggestions([])
+        setOpen(false)
+        return
+      }
+      const [res, sugs] = await Promise.all([
+        window.api.autocomplete(q2),
+        window.api.searchSuggest(q2).catch(() => []),
+      ])
+      let items = res || []
+      const list = sugs || []
+      if (list.length) {
+        const urls = await Promise.all(list.map((s) => window.api.searchUrl(s).catch(() => null)))
+        const searchItems = list
+          .map((s, i) => ({ type: 'search', title: s, url: urls[i] }))
+          .filter((x) => x.url)
+        items = searchItems.concat(items)
+      }
+      const seen = new Set()
+      const unique = items.filter((it) => {
+        const k = it && it.url
+        if (!k || seen.has(k)) return false
+        seen.add(k)
+        return true
+      })
+      setSuggestions(unique)
       setSelected(-1)
-      setOpen(res.length > 0)
+      setOpen(unique.length > 0)
     }, 120)
     return () => clearTimeout(timerRef.current)
   }, [value, internalKey, aiMode, focused])

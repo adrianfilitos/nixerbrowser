@@ -44,7 +44,7 @@ app.whenReady().then(async () => {
       first: links.length ? links[0].textContent.trim() : null,
       greet: document.getElementById('greet').textContent,
       topHidden: document.querySelector('.top').classList.contains('hidden'),
-      qHidden: document.getElementById('q').classList.contains('hidden'),
+      qHidden: document.getElementById('searchWrap').classList.contains('hidden'),
       recentHidden: document.getElementById('recentBlock').classList.contains('hidden'),
       cards: cards,
     }
