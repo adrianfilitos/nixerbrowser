@@ -121,6 +121,11 @@ function setupExtensions() {
 
 function registerTab(wc) {
   if (!extEngine) return
+  try {
+    if (wc.session !== session.defaultSession) return
+  } catch {
+    return
+  }
   const win = BrowserWindow.fromWebContents(wc)
   extEngine.addTab(wc, win)
   if (pendingExtCreate.length) {
@@ -324,6 +329,11 @@ function createWindow({ incognito = false } = {}) {
   win.on('unmaximize', () => { const t = ui(ctx); if (t && !t.isDestroyed()) t.send('win-maximized', false) })
   win.on('closed', () => {
     windows.delete(win)
+    if (incognito) {
+      const ses = session.fromPartition(PRIVATE_PARTITION)
+      try { ses.clearStorageData() } catch {}
+      try { ses.clearCache() } catch {}
+    }
   })
   return ctx
 }
@@ -814,7 +824,7 @@ function registerIpc() {
     if (c) c.activeWcId = Number(wcId) || null
     if (extEngine && wcId) {
       const w = webContents.fromId(Number(wcId))
-      if (w) extEngine.selectTab(w)
+      if (w && w.session === session.defaultSession) extEngine.selectTab(w)
     }
   })
   ipcMain.on('add-history', (e, entry) => {
@@ -834,12 +844,13 @@ function registerIpc() {
 
   ipcMain.on('login-submit', (e, cred) => {
     const c = ctxFor(e)
+    if (!c || c.incognito) return
     const target = c && ui(c)
     if (target && cred && cred.origin && !store.hasPassword(cred.origin)) {
       target.send('save-password-prompt', cred)
     }
   })
-  ipcMain.on('password-save', (e, cred) => { if (cred) store.addPassword(cred) })
+  ipcMain.on('password-save', (e, cred) => { const c = ctxFor(e); if (cred && (!c || !c.incognito)) store.addPassword(cred) })
   ipcMain.on('autofill-request', (e, payload) => {
     const cred = payload && payload.origin ? store.getPassword(payload.origin) : null
     e.sender.send('autofill-response', cred)
@@ -984,6 +995,8 @@ function registerIpc() {
     return isHttpDefault()
   })
   ipcMain.on('save-session', (e, urls) => {
+    const c = ctxFor(e)
+    if (c && c.incognito) return
     store.saveSession((urls || []).map((u) => ({ url: u.url, pinned: !!u.pinned })))
   })
   ipcMain.handle('get-session', () => store.session())
@@ -1305,7 +1318,7 @@ app.whenReady().then(() => {
   buildMenu()
   registerIpc()
   setupExtensions()
-  nixer.install()
+  nixer.install([session.defaultSession, session.fromPartition(PRIVATE_PARTITION)])
   rehydrateExtensions()
   createWindow()
   if (process.env.SMOKE === '1') runSmoke()

@@ -21,6 +21,7 @@ export default function Toolbar({
   profileName,
   profileColor,
   onNewTab,
+  incognito,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
@@ -85,6 +86,15 @@ export default function Toolbar({
         </svg>
         {inProgressCount > 0 && <span className="badge">{inProgressCount}</span>}
       </button>
+      {incognito && (
+        <span className="incognito-chip" title="Estás navegando de incógnito: sin historial, sin sesión guardada ni contraseñas">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4M12 8h.01" />
+          </svg>
+          Incógnito
+        </span>
+      )}
       <browser-action-list className="ext-actions" />
       <ExtensionsMenu onOpenPage={onOpenPage} />
       <div className="menu-wrap" ref={menuRef}>

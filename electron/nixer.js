@@ -1,4 +1,4 @@
-const { protocol } = require('electron')
+const { protocol, session } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
@@ -39,8 +39,8 @@ function nixerToFilePath(url) {
   return resolved
 }
 
-function install() {
-  protocol.handle('nixer', (request) => {
+function install(sessions) {
+  const handler = (request) => {
     const file = nixerToFilePath(request.url)
     if (!file || !fs.existsSync(file)) {
       return new Response('Página no encontrada', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } })
@@ -52,7 +52,13 @@ function install() {
     } catch (e) {
       return new Response('Error de lectura', { status: 500, headers: { 'content-type': 'text/plain' } })
     }
-  })
+  }
+  const list = Array.isArray(sessions) && sessions.length ? sessions : [session.defaultSession]
+  for (const ses of list) {
+    try {
+      ses.protocol.handle('nixer', handler)
+    } catch {}
+  }
 }
 
 module.exports = { registerScheme, nixerToFilePath, install }

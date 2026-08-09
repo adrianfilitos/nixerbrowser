@@ -1323,8 +1323,24 @@ webview.page-view.active {
   border-radius: 8px;
   background: transparent;
   color: var(--text);
-  cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.incognito-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 14px;
+  background: rgba(108, 123, 255, 0.14);
+  border: 1px solid rgba(108, 123, 255, 0.35);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  -webkit-app-region: no-drag;
+  white-space: nowrap;
 }
 
 .tool-btn:hover {

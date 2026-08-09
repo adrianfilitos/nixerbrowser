@@ -59,6 +59,7 @@ export default function App() {
   const [taskManagerOpen, setTaskManagerOpen] = useState(false)
   const [splitWith, setSplitWith] = useState(null)
   const [permission, setPermission] = useState(null)
+  const [incognito, setIncognito] = useState(false)
   const [savePrompt, setSavePrompt] = useState(null)
   const [urlOverrides, setUrlOverrides] = useState({})
   const [maximized, setMaximized] = useState(false)
@@ -146,7 +147,7 @@ export default function App() {
       const url = e.url
       const internal = internalForSrc(url)
       update({ url: internal ? '' : url, internal })
-      if (!internal && url.startsWith('http')) {
+      if (!internal && url.startsWith('http') && !incognitoRef.current) {
         const t = tabsRef.current.find((x) => x.id === id)
         window.api.addHistory({ url, title: (t && t.title) || url })
       }
@@ -338,6 +339,7 @@ export default function App() {
   }
 
   function scheduleSessionSave() {
+    if (incognitoRef.current) return
     clearTimeout(sessionTimerRef.current)
     sessionTimerRef.current = setTimeout(() => {
       setTabs((prev) => {
@@ -359,6 +361,7 @@ export default function App() {
         settingsRef.current = s
         setSettings(s)
         incognitoRef.current = !!w.incognito
+        setIncognito(!!w.incognito)
         setReady(true)
         window.api.getBookmarks().then(setBookmarks)
         window.api.getUrlOverrides().then(setUrlOverrides)
@@ -617,6 +620,7 @@ export default function App() {
           }}
           profileName={settings ? settings.profileName : ''}
           profileColor={settings ? settings.profileColor : ''}
+          incognito={incognito}
           onNewTab={() => addTab()}
         />
       </div>
