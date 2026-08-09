@@ -52,7 +52,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
   const rafRef = useRef(null)
   const suppressClickRef = useRef(false)
 
-  function onPointerDown(e, t) {
+  function onMouseDown(e, t) {
     if (e.button === 1) {
       e.preventDefault()
       onClose(t.id)
@@ -65,7 +65,6 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
     suppressClickRef.current = false
     dragStartRef.current = { x: e.clientX, y: e.clientY }
     if (window.api.dragStart) window.api.dragStart({ tabId: t.id, url: t.url, title: t.title })
-    try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
   }
 
   useEffect(() => {
@@ -79,6 +78,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
         dragMovedRef.current = true
         setDraggingId(t.id)
       }
+      if (e.preventDefault) e.preventDefault()
       if (window.api.dragMove) window.api.dragMove(e.screenX, e.screenY)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       rafRef.current = requestAnimationFrame(() => {
@@ -104,30 +104,26 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
       }
       dragMovedRef.current = false
     }
-    function onCancel() {
-      if (!dragTabRef.current) return
-      dragTabRef.current = null
-      dragMovedRef.current = false
-      setDraggingId(null)
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
-      if (window.api.dragCancel) window.api.dragCancel()
-    }
     function onKey(e) {
-      if (e.key === 'Escape' && dragTabRef.current) onCancel()
+      if (e.key === 'Escape' && dragTabRef.current) {
+        dragTabRef.current = null
+        dragMovedRef.current = false
+        setDraggingId(null)
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+        if (window.api.dragCancel) window.api.dragCancel()
+      }
     }
     function onHighlight(e) {
       setDockTarget(!!e.detail)
     }
-    window.addEventListener('pointermove', onMove, true)
-    window.addEventListener('pointerup', onUp, true)
-    window.addEventListener('pointercancel', onCancel, true)
+    window.addEventListener('mousemove', onMove, true)
+    window.addEventListener('mouseup', onUp, true)
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('nixer-drag-highlight', onHighlight)
     return () => {
-      window.removeEventListener('pointermove', onMove, true)
-      window.removeEventListener('pointerup', onUp, true)
-      window.removeEventListener('pointercancel', onCancel, true)
+      window.removeEventListener('mousemove', onMove, true)
+      window.removeEventListener('mouseup', onUp, true)
       window.removeEventListener('keydown', onKey, true)
       window.removeEventListener('nixer-drag-highlight', onHighlight)
     }
@@ -209,7 +205,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
               if (suppressClickRef.current) { suppressClickRef.current = false; e.preventDefault(); return }
               onSelect(t.id)
             }}
-            onPointerDown={(e) => onPointerDown(e, t)}
+            onMouseDown={(e) => onMouseDown(e, t)}
             onContextMenu={(e) => openMenu(e, t)}
             onDoubleClick={(e) => { e.stopPropagation(); if (!t.pinned) { setRenameVal(t.title || ''); setRenamingId(t.id) } }}
             onKeyDown={(e) => {
