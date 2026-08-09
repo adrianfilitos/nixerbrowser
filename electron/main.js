@@ -593,22 +593,41 @@ function regAdd(args) {
 async function registerAsDefaultBrowser() {
   const exe = process.execPath
   const quoted = '"' + exe + '" "%1"'
-  const base = 'HKCU\\Software\\Classes\\Software\\Clients\\StartMenuInternet\\NixerBrowser'
+  const base = 'HKCU\\Software\\Clients\\StartMenuInternet\\NixerBrowser'
   const steps = [
     ['HKCU\\Software\\RegisteredApplications', '/v', 'Nixer Browser', '/t', 'REG_SZ', '/d', 'Software\\Clients\\StartMenuInternet\\NixerBrowser\\Capabilities'],
     [base + '\\Capabilities', '/ve', '/d', 'Nixer Browser'],
+    [base + '\\Capabilities', '/v', 'ApplicationName', '/t', 'REG_SZ', '/d', 'Nixer Browser'],
+    [base + '\\Capabilities', '/v', 'ApplicationDescription', '/t', 'REG_SZ', '/d', 'Navegador basado en Chromium con interfaz en React'],
+    [base + '\\Capabilities', '/v', 'ApplicationIcon', '/t', 'REG_SZ', '/d', '"' + exe + '",0'],
     [base + '\\Capabilities\\URLAssociations', '/v', 'http', '/t', 'REG_SZ', '/d', 'NixerBrowser.http'],
     [base + '\\Capabilities\\URLAssociations', '/v', 'https', '/t', 'REG_SZ', '/d', 'NixerBrowser.https'],
     [base + '\\Capabilities\\URLAssociations', '/v', 'mailto', '/t', 'REG_SZ', '/d', 'NixerBrowser.mailto'],
+    [base + '\\Capabilities\\Application', '/v', 'ApplicationName', '/t', 'REG_SZ', '/d', 'Nixer Browser'],
+    [base + '\\Capabilities\\Application', '/v', 'ApplicationDescription', '/t', 'REG_SZ', '/d', 'Navegador basado en Chromium con interfaz en React'],
+    [base + '\\Capabilities\\Application', '/v', 'AppUserModelID', '/t', 'REG_SZ', '/d', 'com.nixer.browser'],
+    [base + '\\Capabilities\\DefaultIcon', '/ve', '/d', '"' + exe + '",0'],
     [base + '\\shell\\open\\command', '/ve', '/d', '"' + exe + '"'],
     [base + '\\DefaultIcon', '/ve', '/d', '"' + exe + '",0'],
     ['HKCU\\Software\\Classes\\NixerBrowser.http\\shell\\open\\command', '/ve', '/d', quoted],
     ['HKCU\\Software\\Classes\\NixerBrowser.https\\shell\\open\\command', '/ve', '/d', quoted],
     ['HKCU\\Software\\Classes\\NixerBrowser.mailto\\shell\\open\\command', '/ve', '/d', quoted],
+    ['HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Nixer Browser.exe', '/ve', '/d', exe],
   ]
   const results = []
   for (const s of steps) results.push(await regAdd(s))
   return results.every(Boolean)
+}
+
+function isHttpDefault() {
+  return new Promise((resolve) => {
+    execFile('reg', ['query', 'HKCU\\Software\\Classes\\http\\shell\\open\\command', '/ve'], { windowsHide: true }, (err, stdout) => {
+      if (err || !stdout) return resolve(false)
+      const name = path.basename(process.execPath).toLowerCase()
+      const lower = String(stdout).toLowerCase()
+      resolve(lower.includes(name) || lower.includes('nixerbrowser.http'))
+    })
+  })
 }
 
 function registerIpc() {
@@ -796,7 +815,10 @@ function registerIpc() {
     try { shell.openExternal('ms-settings:defaultapps') } catch {}
     return ok
   })
-  ipcMain.handle('is-default-browser', () => app.isDefaultProtocolClient('http'))
+  ipcMain.handle('is-default-browser', async () => {
+    if (app.isDefaultProtocolClient('http')) return true
+    return isHttpDefault()
+  })
   ipcMain.on('save-session', (e, urls) => {
     store.saveSession((urls || []).map((u) => ({ url: u.url, pinned: !!u.pinned })))
   })

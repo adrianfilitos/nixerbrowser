@@ -676,8 +676,10 @@
         checkDefault()
         document.getElementById('setDefaultBrowser').onclick = async function () {
           var ok = await browserAPI.system.setDefaultBrowser()
-          document.getElementById('defaultBrowserStatus').textContent = ok ? 'Establecido como predeterminado' : 'No se pudo configurar (prueba en Ajustes de Windows)'
-          if (ok) toast('Navegador predeterminado configurado')
+          document.getElementById('defaultBrowserStatus').textContent = ok
+            ? 'Registrado como navegador. Elige Nixer Browser en Aplicaciones predeterminadas de Windows'
+            : 'No se pudo configurar (prueba en Ajustes de Windows)'
+          if (ok) toast('Registro completado')
         }
         document.getElementById('openPasswords').onclick = function () { location.href = 'nixer://passwords' }
         document.getElementById('blockAds').addEventListener('change', function () {
