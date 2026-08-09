@@ -23,6 +23,7 @@ const INTERNAL_LABELS = {
   welcome: 'Bienvenida',
   incognito: 'Incógnito',
   profiles: 'Perfiles',
+  error: 'Error de conexión',
 }
 
 export default function AddressBar({ url, internalKey, focusSignal, navState, onNavigate, onNavAction, onOverlayChange = () => {}, onShields, onSiteInfo }) {

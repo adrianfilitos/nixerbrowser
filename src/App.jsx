@@ -41,6 +41,7 @@ const PAGE_TITLES = {
   workspaces: 'Espacios de trabajo',
   warning: 'Aviso de seguridad',
   incognito: 'Incógnito',
+  error: 'Error de conexión',
 }
 
 let tabSeq = 1
@@ -110,6 +111,7 @@ export default function App() {
   const elsRef = useRef(new Map())
   const attachedRef = useRef(new WeakSet())
   const closedTabsRef = useRef([])
+  const failedUrlRef = useRef(new Map())
   const sessionTimerRef = useRef(null)
   const [ready, setReady] = useState(false)
 
@@ -147,7 +149,7 @@ export default function App() {
 
   function internalForSrc(src) {
     if (!src) return null
-    const n = /^nixer:\/\/([^/]+)(?:\/([^?#]+))?/.exec(src)
+    const n = /^nixer:\/\/([^/?#]+)(?:\/([^?#]+))?/.exec(src)
     if (n) {
       const key = n[2] ? n[2].replace(/\.html$/, '') : n[1]
       if (key === 'newtab') return 'newtab'
@@ -160,6 +162,14 @@ export default function App() {
       if (src.endsWith('/' + k + '.html')) return k
     }
     return null
+  }
+
+  function errorPageOriginal(url) {
+    try {
+      return decodeURIComponent(new URL(url).searchParams.get('url') || '')
+    } catch {
+      return ''
+    }
   }
 
   useEffect(() => {
@@ -197,13 +207,30 @@ export default function App() {
     el.addEventListener('did-navigate', (e) => {
       const url = e.url
       const internal = internalForSrc(url)
-      update({ url: internal ? '' : url, internal })
+      if (internal === 'error') {
+        update({ url: failedUrlRef.current.get(id) || errorPageOriginal(url), internal: 'error', title: 'No se puede acceder a este sitio' })
+        return
+      }
+      update({ url: internal ? '' : url, internal, error: null })
       if (!internal && url.startsWith('http') && !isLoopback(url) && !incognitoRef.current) {
         const t = tabsRef.current.find((x) => x.id === id)
         window.api.addHistory({ url, title: (t && t.title) || url })
       }
       refreshNavState()
       scheduleSessionSave()
+    })
+
+    el.addEventListener('did-fail-load', (e) => {
+      if (!e.isMainFrame) return
+      const code = e.errorCode
+      if (code === -3 || code === -320) return
+      const url = e.validatedURL || ''
+      if (!url) return
+      failedUrlRef.current.set(id, url)
+      update({ url, error: { code, desc: e.errorDescription || '', url }, title: 'No se puede acceder a este sitio' })
+      try {
+        el.loadURL('nixer://error?url=' + encodeURIComponent(url) + '&code=' + code + '&desc=' + encodeURIComponent(e.errorDescription || ''))
+      } catch {}
     })
 
     el.addEventListener('did-navigate-in-page', (e) => {
@@ -423,7 +450,11 @@ export default function App() {
     setTabs((prev) => {
       prev.forEach((t) => {
         const el = elsRef.current.get(t.id)
-        if (el) { try { el.reload() } catch {} }
+        if (!el) return
+        try {
+          if (t.error && t.error.url) el.loadURL(t.error.url)
+          else el.reload()
+        } catch {}
       })
       return prev
     })
@@ -487,7 +518,11 @@ export default function App() {
     try {
       if (action === 'goBack' && el.canGoBack()) el.goBack()
       else if (action === 'goForward' && el.canGoForward()) el.goForward()
-      else if (action === 'reload') el.reload()
+      else if (action === 'reload') {
+        const t = activeTab
+        if (t && t.error && t.error.url) try { el.loadURL(t.error.url) } catch {}
+        else el.reload()
+      }
       else if (action === 'stop') el.stop()
     } catch {}
     refreshNavState()
