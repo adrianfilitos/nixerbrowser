@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Menu, session, shell, dialog, webContents, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const crypto = require('crypto')
 const { execFile } = require('child_process')
 const AdmZip = require('adm-zip')
 const { ElectronChromeExtensions } = require('electron-chrome-extensions')
@@ -630,6 +631,54 @@ function isHttpDefault() {
   })
 }
 
+async function forceProtocolAssociations() {
+  const exe = process.execPath
+  const quoted = '"' + exe + '" "%1"'
+  const steps = [
+    ['HKCU\\Software\\Classes\\http\\shell\\open\\command', '/ve', '/d', quoted],
+    ['HKCU\\Software\\Classes\\https\\shell\\open\\command', '/ve', '/d', quoted],
+    ['HKCU\\Software\\Classes\\ftp\\shell\\open\\command', '/ve', '/d', quoted],
+    ['HKCU\\Software\\Classes\\mailto\\shell\\open\\command', '/ve', '/d', quoted],
+  ]
+  const results = []
+  for (const s of steps) results.push(await regAdd(s))
+  return results.every(Boolean)
+}
+
+function userChoiceHash(progId, sid) {
+  const keyBytes = Buffer.from('A4A120A58017F64FBD18167343C5AF16', 'hex')
+  const msg = Buffer.from(progId + sid, 'utf16le')
+  return crypto.createHmac('sha256', keyBytes).update(msg).digest('base64')
+}
+
+function currentSid() {
+  return new Promise((resolve) => {
+    execFile('whoami', ['/user'], { windowsHide: true }, (err, stdout) => {
+      if (err || !stdout) return resolve(null)
+      const m = /(S-\d+(-\d+)+)/.exec(stdout)
+      resolve(m ? m[1] : null)
+    })
+  })
+}
+
+async function writeUserChoice() {
+  const sid = await currentSid()
+  if (!sid) return false
+  const pairs = [
+    ['http', 'NixerBrowser.http'],
+    ['https', 'NixerBrowser.https'],
+    ['mailto', 'NixerBrowser.mailto'],
+  ]
+  let allOk = true
+  for (const [proto, progId] of pairs) {
+    const key = 'HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\' + proto + '\\UserChoice'
+    const ok1 = await regAdd([key, '/v', 'ProgId', '/t', 'REG_SZ', '/d', progId])
+    const ok2 = await regAdd([key, '/v', 'Hash', '/t', 'REG_SZ', '/d', userChoiceHash(progId, sid)])
+    allOk = allOk && ok1 && ok2
+  }
+  return allOk
+}
+
 function registerIpc() {
   ipcMain.on('win-minimize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.minimize() })
   ipcMain.on('win-toggle-maximize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) { if (w.isMaximized()) w.unmaximize(); else w.maximize() } })
@@ -808,12 +857,17 @@ function registerIpc() {
   ipcMain.handle('ext-storage-set', (_e, items) => { extStorageSet(items); return true })
 
   ipcMain.handle('set-default-browser', async () => {
-    const okHttp = app.setAsDefaultProtocolClient('http')
-    const okHttps = app.setAsDefaultProtocolClient('https')
-    let ok = okHttp && okHttps
-    try { ok = (await registerAsDefaultBrowser()) && ok } catch (e) { ok = false }
-    try { shell.openExternal('ms-settings:defaultapps') } catch {}
-    return ok
+    let regOk = false
+    try { regOk = await registerAsDefaultBrowser() } catch (e) { console.log('DEFAULT_REG_ERR', e && e.message) }
+    let forceOk = false
+    try { forceOk = await forceProtocolAssociations() } catch (e) { console.log('DEFAULT_FORCE_ERR', e && e.message) }
+    let choiceOk = false
+    try { choiceOk = await writeUserChoice() } catch (e) { console.log('DEFAULT_CHOICE_ERR', e && e.message) }
+    try { app.setAsDefaultProtocolClient('http') } catch {}
+    try { app.setAsDefaultProtocolClient('https') } catch {}
+    try { shell.openExternal('ms-settings:defaultapps') } catch (e) { console.log('DEFAULT_OPEN_ERR', e && e.message) }
+    console.log('DEFAULT_REGISTERED regOk=' + regOk + ' forceOk=' + forceOk + ' choiceOk=' + choiceOk)
+    return regOk || forceOk
   })
   ipcMain.handle('is-default-browser', async () => {
     if (app.isDefaultProtocolClient('http')) return true

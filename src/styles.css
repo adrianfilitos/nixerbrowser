@@ -120,7 +120,20 @@ webview.page-view.active {
 .menu-wrap,
 .address-bar,
 .address-bar input,
-.bookmarks-bar .bm-empty {
+.bookmarks-bar .bm-empty,
+.tab-manage,
+.tab-manage-wrap,
+.tab-manage-menu,
+.tm-head,
+.tm-link,
+.tm-tab,
+.tm-close,
+.tm-action,
+.ext-menu-wrap,
+.ext-menu,
+.ext-menu-item,
+.ext-menu-manage,
+.ext-menu-del {
   -webkit-app-region: no-drag;
 }
 

@@ -128,7 +128,8 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
             <path d="M12 5v14M5 12h14" />
           </svg>
         </button>
-        <div className="tab-manage-wrap">
+      </div>
+      <div className="tab-manage-wrap">
           <button className={'tab-manage' + (manageOpen ? ' active' : '')} title="Manejar pestañas" onClick={() => setManageOpen((o) => !o)}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -161,7 +162,6 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
             </div>
           )}
         </div>
-      </div>
       <WindowControls maximized={maximized} />
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />

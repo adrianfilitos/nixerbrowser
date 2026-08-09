@@ -46,15 +46,40 @@ contextBridge.exposeInMainWorld('api', {
 
   onTabs: (cb) => {}, // tabs are local to the renderer now
   onNavigation: (cb) => {},
-  onSettings: (cb) => ipcRenderer.on('settings-updated', (_e, d) => cb(d)),
-  onDownloads: (cb) => ipcRenderer.on('downloads-updated', (_e, d) => cb(d)),
-  onMaximized: (cb) => ipcRenderer.on('win-maximized', (_e, d) => cb(d)),
-  onPermissionRequest: (cb) => ipcRenderer.on('permission-request', (_e, d) => cb(d)),
+  onSettings: (cb) => {
+    const l = (_e, d) => cb(d)
+    ipcRenderer.on('settings-updated', l)
+    return () => ipcRenderer.removeListener('settings-updated', l)
+  },
+  onDownloads: (cb) => {
+    const l = (_e, d) => cb(d)
+    ipcRenderer.on('downloads-updated', l)
+    return () => ipcRenderer.removeListener('downloads-updated', l)
+  },
+  onMaximized: (cb) => {
+    const l = (_e, d) => cb(d)
+    ipcRenderer.on('win-maximized', l)
+    return () => ipcRenderer.removeListener('win-maximized', l)
+  },
+  onPermissionRequest: (cb) => {
+    const l = (_e, d) => cb(d)
+    ipcRenderer.on('permission-request', l)
+    return () => ipcRenderer.removeListener('permission-request', l)
+  },
+  onSavePasswordPrompt: (cb) => {
+    const l = (_e, d) => cb(d)
+    ipcRenderer.on('save-password-prompt', l)
+    return () => ipcRenderer.removeListener('save-password-prompt', l)
+  },
+  onUi: (cb) => {
+    const l = (_e, action, data) => cb(action, data)
+    ipcRenderer.on('ui-action', l)
+    return () => ipcRenderer.removeListener('ui-action', l)
+  },
+
   permissionResponse: (payload) => ipcRenderer.send('permission-response', payload),
-  onSavePasswordPrompt: (cb) => ipcRenderer.on('save-password-prompt', (_e, d) => cb(d)),
   savePassword: (cred) => ipcRenderer.send('password-save', cred),
   autofillForm: () => ipcRenderer.send('autofill-form'),
-  onUi: (cb) => ipcRenderer.on('ui-action', (_e, action, data) => cb(action, data)),
 
   extensionsList: () => ipcRenderer.invoke('extensions:list'),
   extensionsSetEnabled: (id, enabled) => ipcRenderer.invoke('extensions:set-enabled', id, enabled),

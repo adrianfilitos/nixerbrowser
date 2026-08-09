@@ -360,37 +360,40 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    window.api.onSettings(setSettings)
-    window.api.onDownloads(setDownloads)
-    window.api.onMaximized(setMaximized)
-    window.api.onPermissionRequest((req) => setPermission(req))
-    window.api.onSavePasswordPrompt((cred) => setSavePrompt(cred))
-    window.api.onUi((action, data) => {
-      if (action === 'new-tab') addTab()
-      else if (action === 'open-tab') addTab(data)
-      else if (action === 'close-tab') closeTab(activeTab ? activeTab.id : null)
-      else if (action === 'restore-tab') restoreTab()
-      else if (action === 'cycle-tab') cycleTab(data)
-      else if (action === 'open-page') openInternal(data)
-      else if (action === 'open-reader') addTab('', { src: 'nixer://reader?id=' + data, internal: 'reader', title: 'Modo lectura' })
-      else if (action === 'open-find') setFindOpen(true)
-      else if (action === 'open-palette') setPaletteOpen(true)
-      else if (action === 'focus-address') setFocusSignal((s) => s + 1)
-      else if (action === 'open-taskmanager') setTaskManagerOpen(true)
-      else if (action === 'home') home()
-      else if (action === 'bookmark-page') onStar()
-      else if (action === 'activate-tab') {
-        const t = tabsRef.current.find((x) => x.wcId === Number(data))
-        if (t) activate(t.id)
-      }
-      else if (action === 'close-tab-by-wc') {
-        const t = tabsRef.current.find((x) => x.wcId === Number(data))
-        if (t) closeTab(t.id)
-      }
-      else if (action === 'ui-toast') {
-        addToast(data && data.text, data && data.kind)
-      }
-    })
+    const offs = [
+      window.api.onSettings(setSettings),
+      window.api.onDownloads(setDownloads),
+      window.api.onMaximized(setMaximized),
+      window.api.onPermissionRequest((req) => setPermission(req)),
+      window.api.onSavePasswordPrompt((cred) => setSavePrompt(cred)),
+      window.api.onUi((action, data) => {
+        if (action === 'new-tab') addTab()
+        else if (action === 'open-tab') addTab(data)
+        else if (action === 'close-tab') closeTab(activeTab ? activeTab.id : null)
+        else if (action === 'restore-tab') restoreTab()
+        else if (action === 'cycle-tab') cycleTab(data)
+        else if (action === 'open-page') openInternal(data)
+        else if (action === 'open-reader') addTab('', { src: 'nixer://reader?id=' + data, internal: 'reader', title: 'Modo lectura' })
+        else if (action === 'open-find') setFindOpen(true)
+        else if (action === 'open-palette') setPaletteOpen(true)
+        else if (action === 'focus-address') setFocusSignal((s) => s + 1)
+        else if (action === 'open-taskmanager') setTaskManagerOpen(true)
+        else if (action === 'home') home()
+        else if (action === 'bookmark-page') onStar()
+        else if (action === 'activate-tab') {
+          const t = tabsRef.current.find((x) => x.wcId === Number(data))
+          if (t) activate(t.id)
+        }
+        else if (action === 'close-tab-by-wc') {
+          const t = tabsRef.current.find((x) => x.wcId === Number(data))
+          if (t) closeTab(t.id)
+        }
+        else if (action === 'ui-toast') {
+          addToast(data && data.text, data && data.kind)
+        }
+      }),
+    ]
+    return () => { offs.forEach((off) => off && off()) }
   }, [tabs, activeTab, settings])
 
   useEffect(() => {
