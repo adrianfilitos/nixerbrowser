@@ -157,7 +157,7 @@ async function installExtensionFromStore(storeId) {
     const buf = Buffer.from(await res.arrayBuffer())
     const zipStart = crxZipOffset(buf)
     if (zipStart < 0) return { error: 'El archivo descargado no es una extensión .crx válida' }
-    const dir = path.join(app.getPath('userData'), 'extensions', extId)
+    const dir = path.join(app.getPath('userData'), 'extensions-crx', extId)
     fs.mkdirSync(dir, { recursive: true })
     new AdmZip(buf.subarray(zipStart)).extractAllTo(dir, true)
     const ext = await loadExtensionFolder(dir)
