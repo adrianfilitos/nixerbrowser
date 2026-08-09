@@ -93,7 +93,7 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
         if (Math.hypot(dx, dy) < 5) return
         dragMovedRef.current = true
         setDraggingId(t.id)
-        try { localStorage.setItem('nixer-drag-hint-seen', '1') } catch {}
+        try { localStorage.setItem('nixer-drag-hint-v2', '1') } catch {}
         dragDbg('threshold', e.screenX, e.screenY)
       }
       if (e.preventDefault) e.preventDefault()

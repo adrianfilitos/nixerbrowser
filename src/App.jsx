@@ -560,7 +560,7 @@ export default function App() {
       } catch {}
     })()
     try {
-      if (!localStorage.getItem('nixer-drag-hint-seen')) {
+      if (!localStorage.getItem('nixer-drag-hint-v2')) {
         setTimeout(() => addToast('Consejo: pulsa y arrastra una pestaña para reordenarla · suéltala fuera para abrirla en una ventana nueva', 'info'), 1200)
       }
     } catch {}
