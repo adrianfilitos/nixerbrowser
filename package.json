@@ -32,7 +32,9 @@
     "test:translate": "electron electron/test-translate.js",
     "test:dock": "electron electron/test-dock.js",
     "test:drag": "electron electron/test-drag-real.js",
+    "test:reorder": "electron electron/test-reorder.js",
     "test:focus": "electron electron/test-focus.js",
+    "test:cdp": "electron electron/test-cdp.js",
     "test:close": "electron electron/test-close.js",
     "test:ui": "electron electron/test-ui.js",
     "test:smoke": "npm run build && cross-env SMOKE=1 electron ."

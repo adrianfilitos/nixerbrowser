@@ -356,10 +356,6 @@ webview.page-view.active {
   left: 15%;
 }
 
-.tab.dragging {
-  opacity: 0.6;
-}
-
 .tab.pinned {
   min-width: 38px;
   max-width: 38px;
@@ -2261,4 +2257,3 @@ webview.page-view.active {
   outline-offset: -2px;
   border-radius: 8px;
 }
-.tab.dragging { opacity: 0.4; }

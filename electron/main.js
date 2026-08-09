@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, shell, dialog, webContents } = require('electron')
+const { app, BrowserWindow, ipcMain, session, shell, dialog, webContents, screen } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const crypto = require('crypto')
@@ -35,6 +35,95 @@ const translate = require('./translate')
 const { autoUpdater } = require('electron-updater')
 
 let dragState = null
+let dragTarget = null // { wc, winCtx, attached, entered }
+
+function dragData() {
+  const st = dragState || {}
+  return {
+    items: [
+      { mimeType: 'text/plain', data: st.url || '' },
+      { mimeType: 'application/x-nixer-tab', data: JSON.stringify({ tabId: st.tabId, url: st.url, title: st.title }) },
+    ],
+    dragOperationsMask: 1,
+  }
+}
+
+function windowAtCursor() {
+  const p = screen.getCursorScreenPoint()
+  return windowAtPoint(p.x, p.y)
+}
+
+function pointInBounds(b, x, y) {
+  return b && x >= b.x && x < b.x + b.width && y >= b.y && y < b.y + b.height
+}
+
+function windowAtPoint(x, y, exclude) {
+  let hit = null
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (w.isDestroyed() || !w.isVisible() || w === exclude) continue
+    const b = w.getContentBounds()
+    if (pointInBounds(b, x, y)) {
+      if (w.isFocused()) return { win: w, x: x - b.x, y: y - b.y }
+      hit = { win: w, x: x - b.x, y: y - b.y }
+    }
+  }
+  return hit
+}
+
+async function dispatchDrag(type, x, y) {
+  const t = dragTarget
+  if (!t || !t.attached) return false
+  try {
+    await t.wc.debugger.sendCommand('Input.dispatchDragEvent', { type, x: Math.round(x), y: Math.round(y), data: dragData(), modifiers: 0 })
+    return true
+  } catch (err) {
+    if (process.env.DBG_DRAG) console.log('DISPATCH_ERR', type, err && err.message)
+    t.attached = false
+    try { t.wc.debugger.detach() } catch {}
+    return false
+  }
+}
+
+function attachDragTarget(wc, winCtx) {
+  if (dragTarget && dragTarget.wc === wc) return
+  closeDragTarget()
+  dragTarget = { wc, winCtx, attached: false, entered: false }
+  try {
+    wc.debugger.attach('1.3')
+    dragTarget.attached = true
+  } catch (err) {
+    dragTarget.attached = false
+    if (process.env.DBG_DRAG) console.log('ATTACH_ERR', err && err.message)
+  }
+}
+
+function closeDragTarget() {
+  if (dragTarget) {
+    if (dragTarget.winCtx) ctx.sendUi(dragTarget.winCtx, 'drag-highlight', false)
+    if (dragTarget.attached) {
+      try { dragTarget.wc.debugger.detach() } catch {}
+    }
+    dragTarget = null
+  }
+}
+
+function dockInto(targetCtx) {
+  if (!dragState || !targetCtx) return
+  const st = dragState
+  if (st.url) ctx.sendUi(targetCtx, 'open-tab-bg', st.url)
+  const srcCtx = st.win ? ctx.windows.get(st.win) : null
+  if (srcCtx && st.tabId) ctx.sendUi(srcCtx, 'close-tab-by-id', st.tabId)
+  dragState = null
+}
+
+function detachFromDrag(srcCtx) {
+  if (!dragState || !dragState.url) return
+  const st = dragState
+  const wctx = createWindow({ incognito: srcCtx ? srcCtx.incognito : false })
+  if (wctx) setTimeout(() => ctx.sendUi(wctx, 'open-tab', st.url), 900)
+  if (srcCtx && st.tabId) ctx.sendUi(srcCtx, 'close-tab-by-id', st.tabId)
+  dragState = null
+}
 
 if (store.settings().hardwareAcceleration === false) {
   app.disableHardwareAcceleration()
@@ -158,7 +247,45 @@ function registerIpc() {
     const c = ctx.ctxFor(e)
     if (c && info) dragState = { ...info, win: c.win, winId: c.id }
   })
-  ipcMain.on('drag-end', () => { dragState = null })
+  ipcMain.on('drag-move', async (_e, sx, sy) => {
+    if (!dragState) return
+    const hit = (typeof sx === 'number' && typeof sy === 'number') ? windowAtPoint(sx, sy, dragState.win) : windowAtCursor()
+    if (hit) {
+      const targetCtx = ctx.windows.get(hit.win)
+      attachDragTarget(hit.win.webContents, targetCtx)
+      if (dragTarget && dragTarget.attached) {
+        const first = !dragTarget.entered
+        await dispatchDrag(first ? 'dragEnter' : 'dragOver', hit.x, hit.y)
+        dragTarget.entered = true
+        if (first) ctx.sendUi(targetCtx, 'drag-highlight', true)
+      } else {
+        ctx.sendUi(targetCtx, 'drag-highlight', true)
+      }
+    } else {
+      closeDragTarget()
+    }
+  })
+  ipcMain.on('drag-drop', async (e, sx, sy) => {
+    const srcCtx = ctx.ctxFor(e)
+    if (!dragState) { closeDragTarget(); return }
+    const x = (typeof sx === 'number') ? sx : screen.getCursorScreenPoint().x
+    const y = (typeof sy === 'number') ? sy : screen.getCursorScreenPoint().y
+    const hit = windowAtPoint(x, y, dragState.win)
+    const overSrc = dragState.win && !dragState.win.isDestroyed() && pointInBounds(dragState.win.getContentBounds(), x, y)
+    if (hit) {
+      const targetCtx = ctx.windows.get(hit.win)
+      if (dragTarget && dragTarget.wc === hit.win.webContents && dragTarget.attached) {
+        await dispatchDrag('drop', hit.x, hit.y)
+      } else {
+        dockInto(targetCtx)
+      }
+    } else if (!overSrc) {
+      detachFromDrag(srcCtx)
+    }
+    closeDragTarget()
+    setTimeout(() => { dragState = null }, 500)
+  })
+  ipcMain.on('drag-cancel', () => { closeDragTarget(); dragState = null })
   ipcMain.handle('get-drag-state', () => dragState ? { id: dragState.id, winId: dragState.winId } : null)
   ipcMain.handle('dock-dragged', (e) => {
     const target = ctx.ctxFor(e)

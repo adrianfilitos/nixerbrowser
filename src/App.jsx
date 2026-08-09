@@ -581,6 +581,7 @@ export default function App() {
         else if (action === 'open-find') setFindOpen(true)
         else if (action === 'open-palette') setPaletteOpen(true)
         else if (action === 'focus-address') setFocusSignal((s) => s + 1)
+        else if (action === 'drag-highlight') window.dispatchEvent(new CustomEvent('nixer-drag-highlight', { detail: !!data }))
         else if (action === 'open-taskmanager') setTaskManagerOpen(true)
         else if (action === 'home') home()
         else if (action === 'bookmark-page') onStar()
@@ -632,7 +633,7 @@ export default function App() {
           if (t) moveTab(t.id, Number(data))
         }
         else if (action === 'close-tab-by-id') {
-          closeTab(Number(data))
+          closeTab(String(data))
         }
         else if (action === 'translate-page') {
           const t = tabsRef.current.find((x) => x.active)

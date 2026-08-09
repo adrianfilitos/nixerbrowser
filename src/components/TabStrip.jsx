@@ -47,46 +47,90 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
     setManageOpen(false)
   }
 
-  function dragGhost(title) {
-    const c = document.createElement('canvas')
-    c.width = 130
-    c.height = 34
-    const ctx = c.getContext('2d')
-    ctx.fillStyle = '#232329'
-    ctx.beginPath()
-    ctx.roundRect(0, 0, 130, 34, 9)
-    ctx.fill()
-    ctx.fillStyle = '#e9e9ee'
-    ctx.font = '12px system-ui'
-    ctx.fillText((title || 'Pestaña').slice(0, 20), 12, 21)
-    return c
-  }
+  const dragStartRef = useRef({ x: 0, y: 0 })
+  const rafRef = useRef(null)
+  const suppressClickRef = useRef(false)
 
-  function onDragStart(e, t) {
+  function onPointerDown(e, t) {
+    if (e.button === 1) {
+      e.preventDefault()
+      onClose(t.id)
+      return
+    }
+    if (e.button !== 0) return
+    if (e.target.closest && e.target.closest('.tab-close, .tab-audio, .tab-rename')) return
     dragTabRef.current = t
     dragMovedRef.current = false
+    suppressClickRef.current = false
+    dragStartRef.current = { x: e.clientX, y: e.clientY }
     if (window.api.dragStart) window.api.dragStart({ tabId: t.id, url: t.url, title: t.title })
-    try { e.dataTransfer.setData('text/plain', t.url || '') } catch {}
-    try { e.dataTransfer.setDragImage(dragGhost(t.title), 20, 12) } catch {}
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
   }
 
-  function onDragEnd(e, t) {
-    if (window.api.dragEnd) window.api.dragEnd()
-    if (dragMovedRef.current) { dragTabRef.current = null; return }
-    // si se suelta fuera de la ventana → nueva ventana
-    const m = 12
-    const outside =
-      e.screenX < window.screenX - m || e.screenX > window.screenX + window.outerWidth + m ||
-      e.screenY < window.screenY - m || e.screenY > window.screenY + window.outerHeight + m
-    dragTabRef.current = null
-    if (outside && onDetach) onDetach(t.id)
-  }
+  useEffect(() => {
+    function onMove(e) {
+      const t = dragTabRef.current
+      if (!t) return
+      if (!dragMovedRef.current) {
+        const dx = e.clientX - dragStartRef.current.x
+        const dy = e.clientY - dragStartRef.current.y
+        if (Math.hypot(dx, dy) < 5) return
+        dragMovedRef.current = true
+      }
+      if (window.api.dragMove) window.api.dragMove(e.screenX, e.screenY)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      rafRef.current = requestAnimationFrame(() => {
+        const el = document.elementFromPoint(e.clientX, e.clientY)
+        const tabEl = el && el.closest ? el.closest('.tab') : null
+        if (tabEl && tabEl.dataset.id && String(tabEl.dataset.id) !== String(t.id)) {
+          onReorder(t.id, tabEl.dataset.id)
+        }
+      })
+    }
+    function onUp(e) {
+      const t = dragTabRef.current
+      if (!t) return
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+      dragTabRef.current = null
+      if (dragMovedRef.current) {
+        suppressClickRef.current = true
+        if (window.api.dragDrop) window.api.dragDrop(e.screenX, e.screenY)
+      } else if (window.api.dragCancel) {
+        window.api.dragCancel()
+      }
+      dragMovedRef.current = false
+    }
+    function onCancel() {
+      if (!dragTabRef.current) return
+      dragTabRef.current = null
+      dragMovedRef.current = false
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+      if (window.api.dragCancel) window.api.dragCancel()
+    }
+    function onKey(e) {
+      if (e.key === 'Escape' && dragTabRef.current) onCancel()
+    }
+    function onHighlight(e) {
+      setDockTarget(!!e.detail)
+    }
+    window.addEventListener('pointermove', onMove, true)
+    window.addEventListener('pointerup', onUp, true)
+    window.addEventListener('pointercancel', onCancel, true)
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('nixer-drag-highlight', onHighlight)
+    return () => {
+      window.removeEventListener('pointermove', onMove, true)
+      window.removeEventListener('pointerup', onUp, true)
+      window.removeEventListener('pointercancel', onCancel, true)
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('nixer-drag-highlight', onHighlight)
+    }
+  }, [onReorder])
 
-  function onTabDragOver(e, t) {
+  function onTabDragOver(e) {
     e.preventDefault()
-    if (!dragTabRef.current || dragTabRef.current.id === t.id) return
-    dragMovedRef.current = true
-    onReorder(dragTabRef.current.id, t.id)
   }
 
   function onListDragOver(e) {
@@ -156,17 +200,12 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
             key={t.id}
             data-id={t.id}
             className={'tab' + (t.active ? ' active' : '') + (t.pinned ? ' pinned' : '')}
-            draggable
-            onDragStart={(e) => onDragStart(e, t)}
-            onDragEnd={(e) => onDragEnd(e, t)}
-            onDragOver={(e) => onTabDragOver(e, t)}
-            onClick={() => onSelect(t.id)}
-            onMouseDown={(e) => {
-              if (e.button === 1) {
-                e.preventDefault()
-                onClose(t.id)
-              }
+            onDragOver={onTabDragOver}
+            onClick={(e) => {
+              if (suppressClickRef.current) { suppressClickRef.current = false; e.preventDefault(); return }
+              onSelect(t.id)
             }}
+            onPointerDown={(e) => onPointerDown(e, t)}
             onContextMenu={(e) => openMenu(e, t)}
             onDoubleClick={(e) => { e.stopPropagation(); if (!t.pinned) { setRenameVal(t.title || ''); setRenamingId(t.id) } }}
             onKeyDown={(e) => {
@@ -177,6 +216,10 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
             }}
             onDrop={(e) => {
               e.preventDefault()
+              if (e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('application/x-nixer-tab') !== -1) {
+                if (window.api.dockDragged) window.api.dockDragged()
+                return
+              }
               if (dragTabRef.current) return
               const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')
               if (url && /^https?:/.test(url.trim()) && onNavigateTab) onNavigateTab(t.id, url.trim())
