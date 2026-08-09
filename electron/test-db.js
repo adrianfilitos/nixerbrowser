@@ -21,7 +21,7 @@ app.whenReady().then(async () => {
   store.addBookmark({ url: 'https://ejemplo.com', title: 'Ejemplo' })
   store.addHistory({ url: 'https://historia.com', title: 'Historia' })
   store.setSettings({ aiApiKey: 'sk-secreto-ia', autofillProfile: { name: 'Ana García', email: 'ana@test.com', zip: '28001' } })
-  store.setSettings({ blockAds: false, minimizeToTray: false, showBookmarksBar: false, tabMinWidth: 150, defaultZoom: 1, aiTemperature: 0.7, customSearchEngines: [{ id: 'custom-1', name: 'MiMotor', tpl: 'https://x.com/?q={q}' }] })
+  store.setSettings({ blockAds: false, minimizeToTray: false, showBookmarksBar: false, clearDataOnExit: false, startMinimized: false, tabMinWidth: 150, defaultZoom: 1, aiTemperature: 0.7, customSearchEngines: [{ id: 'custom-1', name: 'MiMotor', tpl: 'https://x.com/?q={q}' }] })
   store.addPassword({ origin: 'https://banco.com', username: 'ana', password: 'clave-super-secreta' })
   store.addReadingItem({ title: 'Articulo', url: 'https://art.com', text: 'contenido privado del articulo' })
   store.saveWorkspace('Trabajo', [{ url: 'https://a.com', title: 'A' }])
@@ -59,6 +59,8 @@ app.whenReady().then(async () => {
   checks.blockAdsOff = s.blockAds === false
   checks.minimizeToTrayOff = s.minimizeToTray === false
   checks.showBookmarksBarOff = s.showBookmarksBar === false
+  checks.clearDataOnExitOff = s.clearDataOnExit === false
+  checks.startMinimizedOff = s.startMinimized === false
   checks.tabMinWidthNum = s.tabMinWidth === 150
   checks.defaultZoomNum = s.defaultZoom === 1
   checks.temperatureNum = s.aiTemperature === 0.7

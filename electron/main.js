@@ -1048,7 +1048,7 @@ async function runSmoke() {
 }
 
 app.on('will-quit', () => {
-  if (store.settings().clearDataOnExit) {
+  if (store.settings().clearDataOnExit === true) {
     try { session.defaultSession.clearCache() } catch {}
     try { session.defaultSession.clearStorageData() } catch {}
   }
