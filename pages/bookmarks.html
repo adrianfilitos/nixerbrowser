@@ -39,6 +39,7 @@
   <body>
     <header>
       <h1>Marcadores</h1>
+      <input id="bmSearch" type="text" placeholder="Buscar marcador…" style="flex:1;max-width:340px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;outline:none" />
       <button class="ghost" id="export">Exportar…</button>
       <button class="ghost" id="import">Importar…</button>
       <button class="danger" id="clear">Borrar todo</button>
@@ -65,6 +66,8 @@
 
       async function render() {
         var items = await browserAPI.bookmarks.list()
+        var f = (document.getElementById('bmSearch').value || '').toLowerCase()
+        if (f) items = items.filter(function (b) { return (b.title + ' ' + b.url).toLowerCase().indexOf(f) !== -1 })
         list.innerHTML = ''
         if (!items.length) {
           list.innerHTML = '<div class="empty">No hay marcadores</div>'
@@ -119,6 +122,7 @@
         drawGroup(items.filter(function (b) { return !b.folder }), '')
       }
 
+      document.getElementById('bmSearch').addEventListener('input', render)
       document.getElementById('addFolder').onclick = async function () {
         var name = document.getElementById('folderName').value.trim()
         if (!name) return

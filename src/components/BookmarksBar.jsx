@@ -14,8 +14,9 @@ function copyText(t) {
   }
 }
 
-export default function BookmarksBar({ bookmarks, onNavigate, onRemove, onOverlayChange = () => {}, onNewUrl, onAdd }) {
+export default function BookmarksBar({ bookmarks, onNavigate, onRemove, onOverlayChange = () => {}, onNewUrl, onAdd, onReorder }) {
   const [menu, setMenu] = useState(null)
+  const [dragId, setDragId] = useState(null)
 
   useEffect(() => {
     onOverlayChange(!!menu)
@@ -55,8 +56,25 @@ export default function BookmarksBar({ bookmarks, onNavigate, onRemove, onOverla
       {folderless.map((b) => (
         <div
           key={b.id}
-          className="bm-item"
+          className={'bm-item' + (dragId === b.id ? ' dragging' : '')}
           title={b.url}
+          draggable
+          onDragStart={(e) => { setDragId(b.id); e.dataTransfer.setData('text/plain', b.url) }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            if (dragId && dragId !== b.id) {
+              const from = bookmarks.findIndex((x) => x.id === dragId)
+              const to = bookmarks.findIndex((x) => x.id === b.id)
+              if (from >= 0 && to >= 0 && from !== to) {
+                const next = [...bookmarks]
+                const [moved] = next.splice(from, 1)
+                next.splice(to, 0, moved)
+                if (onReorder) onReorder(next.map((x) => x.id))
+              }
+              setDragId(null)
+            }
+          }}
+          onDragEnd={() => setDragId(null)}
           onClick={() => onNavigate(b.url)}
           onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); onNewUrl(b.url) } }}
           onContextMenu={(e) => {

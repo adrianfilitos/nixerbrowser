@@ -373,6 +373,7 @@ function registerIpc() {
   ipcMain.handle('bookmarks:add', (_e, b) => store.addBookmark(b))
   ipcMain.handle('bookmarks:remove', (_e, id) => store.removeBookmark(id))
   ipcMain.handle('bookmarks:update', (_e, id, patch) => store.updateBookmark(id, patch))
+  ipcMain.handle('bookmarks:reorder', (_e, ids) => store.reorderBookmarks(ids))
   ipcMain.handle('bookmarks:export', async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender)
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
@@ -414,6 +415,7 @@ function registerIpc() {
   ipcMain.handle('downloads:clear', () => { store.clearDownloads(); util.broadcastDownloads() })
   ipcMain.handle('downloads:open', (_e, p) => { if (p) { try { shell.openPath(p) } catch {} } return true })
   ipcMain.handle('downloads:show', (_e, p) => { if (p) { try { shell.showItemInFolder(p) } catch {} } return true })
+  ipcMain.handle('downloads:folder', (_e, p) => { if (p) { try { shell.openPath(path.dirname(p)) } catch {} } return true })
   ipcMain.handle('downloads:cancel', () => true)
   ipcMain.handle('settings:get', () => util.settingsForUi())
   ipcMain.handle('settings:defaults', () => store.settingsDefaults())
@@ -522,6 +524,10 @@ app.on('web-contents-created', (_e, wc) => {
   })
   safeBrowsing.attachWebviewGuards(wc)
   pageStyle.attach(wc)
+  wc.on('update-target-url', (_e, url) => {
+    const c = ctx.ctxForWc(wc)
+    if (c) ctx.sendUi(c, 'status-url', url || '')
+  })
   wc.setWindowOpenHandler(({ url }) => {
     if (store.settings().blockPopups) return { action: 'deny' }
     const c = ctx.ctxForWc(wc)

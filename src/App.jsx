@@ -34,6 +34,7 @@ const PAGE_TITLES = {
   passwords: 'Contraseñas',
   extensions: 'Extensiones',
   about: 'Acerca de Nixer',
+  credits: 'Créditos',
   warning: 'Aviso de seguridad',
   incognito: 'Incógnito',
 }
@@ -82,6 +83,7 @@ export default function App() {
   const [taskManagerOpen, setTaskManagerOpen] = useState(false)
   const [splitWith, setSplitWith] = useState(null)
   const [closedCount, setClosedCount] = useState(0)
+  const [statusUrl, setStatusUrl] = useState('')
   const [permission, setPermission] = useState(null)
   const [incognito, setIncognito] = useState(false)
   const [savePrompt, setSavePrompt] = useState(null)
@@ -363,6 +365,16 @@ export default function App() {
     if (url) window.api.createWindow(false, url)
   }
 
+  function openExternal(url) {
+    const t = tabs.find((x) => x.active)
+    if (t && t.internal && !t.url && !t.pinned) {
+      const el = elsRef.current.get(t.id)
+      if (el) { try { el.loadURL(url) } catch {} }
+      return
+    }
+    addTab(url, { activate: !(settingsRef.current && settingsRef.current.openLinksInBackground) })
+  }
+
   function navigateTab(id, url) {
     const el = elsRef.current.get(id)
     if (el && url) {
@@ -528,7 +540,7 @@ export default function App() {
       window.api.onSavePasswordPrompt((cred) => setSavePrompt(cred)),
       window.api.onUi((action, data) => {
         if (action === 'new-tab') addTab()
-        else if (action === 'open-tab') addTab(data, { activate: !(settingsRef.current && settingsRef.current.openLinksInBackground) })
+        else if (action === 'open-tab') openExternal(data)
         else if (action === 'open-tab-bg') addTab(data, { activate: false })
         else if (action === 'close-tab') closeTab(activeTab ? activeTab.id : null)
         else if (action === 'restore-tab') restoreTab()
@@ -587,6 +599,9 @@ export default function App() {
         else if (action === 'move-tab') {
           const t = activeTab
           if (t) moveTab(t.id, Number(data))
+        }
+        else if (action === 'status-url') {
+          setStatusUrl(data || '')
         }
       }),
     ]
@@ -794,6 +809,14 @@ export default function App() {
             onRemove={confirmRemoveBookmark}
             onNewUrl={(url) => addTab(url)}
             onAdd={(url, title) => window.api.addBookmark({ url, title }).then(() => { refreshBookmarks(); addToast('Marcador añadido', 'ok') })}
+            onReorder={(ids) => {
+              setBookmarks((prev) => {
+                const map = new Map(prev.map((b) => [b.id, b]))
+                const next = ids.map((id) => map.get(id)).filter(Boolean)
+                window.api.reorderBookmarks(ids)
+                return next
+              })
+            }}
           />
         )}
         <Toolbar
@@ -845,6 +868,9 @@ export default function App() {
           <button className="split-exit" title="Salir de la vista dividida" onClick={() => setSplitWith(null)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
+        )}
+        {statusUrl && (
+          <div className="status-bar" title={statusUrl}>{statusUrl}</div>
         )}
       </div>
 

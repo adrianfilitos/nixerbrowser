@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'" />
+    <title>Créditos</title>
+    <style>
+      :root { --bg:#151518; --bg2:#1c1c20; --bg3:#26262c; --border:#2e2e35; --text:#e9e9ee; --dim:#9c9ca6; --faint:#6c6c76; --accent:#6c7bff; }
+      :root.light { --bg:#f2f3f7; --bg2:#ffffff; --bg3:#ececf2; --border:#d9dae2; --text:#191a1f; --dim:#54555e; --faint:#7a7b85; --accent:#4a5ae0; }
+      * { box-sizing:border-box; margin:0; padding:0; }
+      body { font-family:system-ui,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; }
+      .card { max-width:620px; text-align:center; padding:28px; }
+      h1 { font-size:22px; margin-bottom:8px; }
+      .sub { color:var(--dim); font-size:14px; margin-bottom:22px; }
+      ul { list-style:none; text-align:left; background:var(--bg2); border:1px solid var(--border); border-radius:14px; padding:18px 22px; display:inline-block; }
+      li { padding:6px 0; color:var(--dim); font-size:13px; }
+      li b { color:var(--text); }
+      .back { margin-top:22px; }
+      button { padding:9px 18px; border-radius:10px; border:1px solid var(--border); background:var(--bg3); color:var(--text); cursor:pointer; font-size:13px; }
+      button:hover { filter:brightness(1.1); }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Nixer Browser</h1>
+      <div class="sub">Construido con tecnologías de código abierto</div>
+      <ul>
+        <li><b>Electron</b> — marco de aplicación de escritorio</li>
+        <li><b>Chromium</b> — motor de renderizado y red</li>
+        <li><b>React</b> — interfaz de usuario</li>
+        <li><b>electron-chrome-extensions</b> — soporte de extensiones</li>
+        <li><b>StevenBlack/hosts</b> y <b>pgl.yoyo.org</b> — listas de bloqueo de anuncios</li>
+        <li><b>URLhaus (Abuse.ch)</b> — protección contra malware y phishing</li>
+        <li><b>api.qrserver.com</b> — generación de códigos QR</li>
+      </ul>
+      <div class="back"><button id="back">Volver</button></div>
+    </div>
+    <script>
+      document.getElementById('back').onclick = function () { location.href = 'nixer://newtab' }
+    </script>
+  </body>
+</html>

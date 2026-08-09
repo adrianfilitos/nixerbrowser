@@ -95,13 +95,21 @@
             row.className = 'row'
             row.innerHTML =
               '<span class="title pointer"></span><span class="url pointer"></span><span class="time"></span>' +
-              '<span class="actions"><button class="del" title="Eliminar">Eliminar</button></span>'
+              '<span class="actions"><button class="copyurl" title="Copiar URL">Copiar</button><button class="del" title="Eliminar">Eliminar</button></span>'
             row.querySelector('.title').textContent = h.title || h.url
             row.querySelector('.url').textContent = h.url
             row.querySelector('.time').textContent = fmtTime(h.ts)
             row.querySelector('.title').onclick = function () { browserAPI.openTab(h.url) }
             row.querySelector('.url').onclick = function () { browserAPI.openTab(h.url) }
             row.querySelector('.title').onauxclick = function (e) { if (e.button === 1) browserAPI.openTab(h.url) }
+            row.querySelector('.copyurl').onclick = function () {
+              var ta = document.createElement('textarea')
+              ta.value = h.url
+              document.body.appendChild(ta)
+              ta.select()
+              try { document.execCommand('copy') } catch {}
+              document.body.removeChild(ta)
+            }
             row.querySelector('.del').onclick = async function () {
               await browserAPI.history.remove(h.url)
               render()

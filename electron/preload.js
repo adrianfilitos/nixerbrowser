@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('api', {
   removeBookmark: (id) => ipcRenderer.invoke('bookmarks:remove', id),
   exportBookmarks: () => ipcRenderer.invoke('bookmarks:export'),
   importBookmarks: () => ipcRenderer.invoke('bookmarks:import'),
+  reorderBookmarks: (ids) => ipcRenderer.invoke('bookmarks:reorder', ids),
   isBookmarked: (url) => ipcRenderer.invoke('bookmarks:is-bookmarked', url),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSetting: (patch) => ipcRenderer.invoke('settings:set', patch),

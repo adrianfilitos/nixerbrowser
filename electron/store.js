@@ -180,6 +180,12 @@ function removeBookmark(id) {
   persist('bookmarks')
 }
 
+function reorderBookmarks(ids) {
+  const map = new Map(state.bookmarks.map((b) => [b.id, b]))
+  state.bookmarks = (ids || []).map((id) => map.get(id)).filter(Boolean)
+  persist('bookmarks')
+}
+
 function updateBookmark(id, patch) {
   const b = state.bookmarks.find((x) => x.id === id)
   if (b) {
@@ -388,6 +394,7 @@ module.exports = {
   addBookmark,
   removeBookmark,
   updateBookmark,
+  reorderBookmarks,
   isBookmarked,
   toggleBookmark,
   closedTabs,

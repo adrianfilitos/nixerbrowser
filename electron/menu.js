@@ -103,6 +103,7 @@ function createMenus(deps) {
         label: 'Ayuda',
         submenu: [
           { label: 'Acerca de Nixer Browser', accelerator: 'F1', click: () => act('open-page', 'about') },
+          { label: 'Créditos y licencias', click: () => act('open-page', 'credits') },
         ],
       },
       {
@@ -114,6 +115,8 @@ function createMenus(deps) {
           { type: 'separator' },
           { label: 'Pestaña siguiente', accelerator: 'CmdOrCtrl+Tab', click: () => act('cycle-tab', 1) },
           { label: 'Pestaña anterior', accelerator: 'CmdOrCtrl+Shift+Tab', click: () => act('cycle-tab', -1) },
+          { label: 'Página siguiente', accelerator: 'PageDown', click: () => act('cycle-tab', 1) },
+          { label: 'Página anterior', accelerator: 'PageUp', click: () => act('cycle-tab', -1) },
           { label: 'Mover pestaña a la izquierda', accelerator: 'Alt+Shift+Left', click: () => act('move-tab', -1) },
           { label: 'Mover pestaña a la derecha', accelerator: 'Alt+Shift+Right', click: () => act('move-tab', 1) },
           { type: 'separator' },
@@ -222,6 +225,7 @@ function createMenus(deps) {
     template.push({ label: 'Guardar imagen como…', click: () => saveAsUrl(BrowserWindow.fromWebContents(wc), params.srcURL) })
     template.push({ label: 'Copiar dirección de la imagen', click: () => { if (wc) wc.copy(params.srcURL) } })
     template.push({ label: 'Abrir imagen en pestaña nueva', click: () => sendUi(ctx, 'open-tab', params.srcURL) })
+    template.push({ label: 'Abrir imagen en ventana de incógnito', click: () => { const c2 = createWindow({ incognito: true }); setTimeout(() => sendUi(c2, 'open-tab', params.srcURL), 900) } })
     template.push({ label: 'Buscar imagen en Google', click: () => sendUi(ctx, 'open-tab', 'https://www.google.com/searchbyimage?image_url=' + encodeURIComponent(params.srcURL)) })
     template.push({ type: 'separator' })
   }

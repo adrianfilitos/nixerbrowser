@@ -76,6 +76,7 @@ if (IS_INTERNAL_PAGE) {
     add: (b) => ipcRenderer.invoke('bookmarks:add', b),
     remove: (id) => ipcRenderer.invoke('bookmarks:remove', id),
     update: (id, patch) => ipcRenderer.invoke('bookmarks:update', id, patch),
+    reorder: (ids) => ipcRenderer.invoke('bookmarks:reorder', ids),
     clear: () => ipcRenderer.invoke('bookmarks:clear'),
     export: () => ipcRenderer.invoke('bookmarks:export'),
     import: () => ipcRenderer.invoke('bookmarks:import'),
@@ -86,6 +87,7 @@ if (IS_INTERNAL_PAGE) {
     cancel: (id) => ipcRenderer.invoke('downloads:cancel', id),
     open: (p) => ipcRenderer.invoke('downloads:open', p),
     show: (p) => ipcRenderer.invoke('downloads:show', p),
+    folder: (p) => ipcRenderer.invoke('downloads:folder', p),
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
