@@ -173,11 +173,6 @@ export default function App() {
     el.addEventListener('did-start-loading', () => refreshNavState())
     el.addEventListener('did-stop-loading', () => refreshNavState())
 
-    el.addEventListener('new-window', (e) => {
-      e.preventDefault()
-      addTab(e.url)
-    })
-
     el.addEventListener('found-in-page', (e) => {
       setFindResult(e.result)
     })
@@ -606,7 +601,6 @@ export default function App() {
             src={t.src}
             partition={incognitoRef.current ? 'navegador-incognito' : undefined}
             preload={viewInfoRef.current.preload || undefined}
-            allowpopups
             className={'page-view' + (t.active ? ' active' : '')}
           />
         ))}

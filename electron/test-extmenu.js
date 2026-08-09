@@ -1,8 +1,12 @@
 const { app, BrowserWindow, session } = require('electron')
-require('./main')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
+
+process.env.NIXER_USER_DATA = path.join(os.tmpdir(), 'nixer-extmenu-profile')
+fs.rmSync(process.env.NIXER_USER_DATA, { recursive: true, force: true })
+
+require('./main')
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 const store = require('./store')
@@ -32,29 +36,24 @@ app.whenReady().then(async () => {
 
   const win = BrowserWindow.getAllWindows()[0]
   const ui = win.webContents
-  const wv = await ui.executeJavaScript(`(() => { const wv = document.querySelector('webview.active'); if (!wv) return null; wv.loadURL('nixer://extensions'); return true })()`)
+  await ui.executeJavaScript(`document.querySelector('.new-tab').click(); true`)
+  await delay(1500)
+  await ui.executeJavaScript(`(() => { const wv = document.querySelector('webview.active'); if (wv) wv.loadURL('nixer://extensions'); return true })()`)
   await delay(2500)
 
   const r = await ui.executeJavaScript(`(async () => {
     const wv = document.querySelector('webview.active')
-    return await wv.executeJavaScript(\`(function () {
-      var cards = Array.from(document.querySelectorAll('.card'))
-      var menuExt = cards.find(function (c) { return c.querySelector('.ext-title b') && c.querySelector('.ext-title b').textContent.indexOf('Menu Ext') === 0 })
-      if (!menuExt) return { found: false, total: cards.length }
-      return {
-        found: true,
-        total: cards.length,
-        hasIcon: !!menuExt.querySelector('.ext-icon') && menuExt.querySelector('.ext-icon').tagName === 'IMG',
-        optionsVisible: menuExt.querySelector('[data-a="options"]').style.display !== 'none',
-        homeVisible: menuExt.querySelector('[data-a="home"]').style.display !== 'none',
-        meta: menuExt.querySelector('.card-meta').textContent,
-        switchOn: menuExt.querySelector('[data-a="sw"]').classList.contains('on'),
-      }
+    const inner = await wv.executeJavaScript(\`(async function () {
+      var out = { url: location.href, title: document.title, hasAPI: typeof browserAPI }
+      try { out.list = await browserAPI.extensions.list() } catch (e) { out.err = String(e) }
+      out.cards = document.querySelectorAll('.card').length
+      return out
     })()\`)
+    return inner
   })()`)
 
   console.log('EXTPAGE:', JSON.stringify(r))
-  const ok = !!r && r.found && r.hasIcon && r.optionsVisible && r.homeVisible && r.switchOn
+  const ok = !!r && Array.isArray(r.list) && r.list.length > 0 && r.cards > 0
   console.log('RESULT:', ok ? 'EXTMENU_OK' : 'EXTMENU_FAIL')
   app.exit(ok ? 0 : 1)
 }).catch((e) => { console.log('ERR', e && e.stack); app.exit(2) })

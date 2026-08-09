@@ -42,6 +42,7 @@ const DEFAULT_SETTINGS = {
   showRecent: true,
   greeting: '',
   compact: false,
+  memorySaver: true,
   defaultZoom: 1,
   downloadPath: '',
   autofillProfile: { name: '', email: '', phone: '', company: '', address: '', city: '', zip: '' },

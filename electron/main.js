@@ -1,8 +1,12 @@
 const { app, BrowserWindow, ipcMain, Menu, session, shell, dialog, webContents, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const { execFile } = require('child_process')
 const AdmZip = require('adm-zip')
 const { ElectronChromeExtensions } = require('electron-chrome-extensions')
+
+app.commandLine.appendSwitch('js-flags', '--expose-gc')
+app.commandLine.appendSwitch('disable-features', 'OptimizationHints,MediaRouter,TranslateUI,NetworkTimeServiceQuerying,WebRtcLocalEcho,FontSrcLocalMatching,HistoryManipulationIntervention')
 
 app.setName('Nixer Browser')
 app.setAppUserModelId('com.nixer.browser')
@@ -14,6 +18,24 @@ const ai = require('./ai')
 const nixer = require('./nixer')
 
 nixer.registerScheme()
+
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (_e, argv) => {
+    const url = (argv || []).find((a) => /^https?:\/\//i.test(a) || /^nixer:/.test(a))
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
+    if (url) {
+      const c = windows.get(win)
+      if (c) sendUi(c, 'open-tab', url)
+    }
+  })
+}
 
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
 const PRIVATE_PARTITION = 'navegador-incognito'
@@ -102,6 +124,20 @@ function broadcastSettings() {
   for (const ctx of windows.values()) {
     const t = ui(ctx)
     if (t && !t.isDestroyed()) t.send('settings-updated', s)
+  }
+}
+
+function gcHiddenWebviews() {
+  if (!store.settings().memorySaver) return
+  const activeIds = new Set()
+  for (const ctx of windows.values()) {
+    if (ctx.activeWcId) activeIds.add(ctx.activeWcId)
+  }
+  for (const wc of webContents.getAllWebContents()) {
+    if (wc.getType() !== 'webview' || wc.isDestroyed() || activeIds.has(wc.id)) continue
+    const win = BrowserWindow.fromWebContents(wc)
+    if (!win || !windows.has(win)) continue
+    try { wc.executeJavaScript('if (window.gc) window.gc()') } catch {}
   }
 }
 
@@ -216,6 +252,7 @@ function createWindow({ incognito = false } = {}) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      spellcheck: false,
       webviewTag: true,
       backgroundColor: '#141414',
     },
@@ -547,6 +584,33 @@ function initDownloads() {
   })
 }
 
+function regAdd(args) {
+  return new Promise((resolve) => {
+    execFile('reg', ['add', ...args, '/f'], { windowsHide: true }, (err) => resolve(!err))
+  })
+}
+
+async function registerAsDefaultBrowser() {
+  const exe = process.execPath
+  const quoted = '"' + exe + '" "%1"'
+  const base = 'HKCU\\Software\\Classes\\Software\\Clients\\StartMenuInternet\\NixerBrowser'
+  const steps = [
+    ['HKCU\\Software\\RegisteredApplications', '/v', 'Nixer Browser', '/t', 'REG_SZ', '/d', 'Software\\Clients\\StartMenuInternet\\NixerBrowser\\Capabilities'],
+    [base + '\\Capabilities', '/ve', '/d', 'Nixer Browser'],
+    [base + '\\Capabilities\\URLAssociations', '/v', 'http', '/t', 'REG_SZ', '/d', 'NixerBrowser.http'],
+    [base + '\\Capabilities\\URLAssociations', '/v', 'https', '/t', 'REG_SZ', '/d', 'NixerBrowser.https'],
+    [base + '\\Capabilities\\URLAssociations', '/v', 'mailto', '/t', 'REG_SZ', '/d', 'NixerBrowser.mailto'],
+    [base + '\\shell\\open\\command', '/ve', '/d', '"' + exe + '"'],
+    [base + '\\DefaultIcon', '/ve', '/d', '"' + exe + '",0'],
+    ['HKCU\\Software\\Classes\\NixerBrowser.http\\shell\\open\\command', '/ve', '/d', quoted],
+    ['HKCU\\Software\\Classes\\NixerBrowser.https\\shell\\open\\command', '/ve', '/d', quoted],
+    ['HKCU\\Software\\Classes\\NixerBrowser.mailto\\shell\\open\\command', '/ve', '/d', quoted],
+  ]
+  const results = []
+  for (const s of steps) results.push(await regAdd(s))
+  return results.every(Boolean)
+}
+
 function registerIpc() {
   ipcMain.on('win-minimize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.minimize() })
   ipcMain.on('win-toggle-maximize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) { if (w.isMaximized()) w.unmaximize(); else w.maximize() } })
@@ -724,11 +788,13 @@ function registerIpc() {
   ipcMain.handle('ext-storage-get', (_e, keys) => extStorageGet(keys))
   ipcMain.handle('ext-storage-set', (_e, items) => { extStorageSet(items); return true })
 
-  ipcMain.handle('set-default-browser', () => {
+  ipcMain.handle('set-default-browser', async () => {
     const okHttp = app.setAsDefaultProtocolClient('http')
     const okHttps = app.setAsDefaultProtocolClient('https')
+    let ok = okHttp && okHttps
+    try { ok = (await registerAsDefaultBrowser()) && ok } catch (e) { ok = false }
     try { shell.openExternal('ms-settings:defaultapps') } catch {}
-    return okHttp && okHttps
+    return ok
   })
   ipcMain.handle('is-default-browser', () => app.isDefaultProtocolClient('http'))
   ipcMain.on('save-session', (e, urls) => {
@@ -868,11 +934,28 @@ function autocompleteQuery(q) {
 }
 
 app.on('web-contents-created', (_e, wc) => {
+  if (wc.getType() === 'window') {
+    wc.on('will-attach-webview', (event, webPreferences) => {
+      webPreferences.sandbox = true
+      webPreferences.contextIsolation = true
+      webPreferences.nodeIntegration = false
+      webPreferences.nodeIntegrationInSubFrames = false
+      webPreferences.webSecurity = true
+      webPreferences.allowRunningInsecureContent = false
+      webPreferences.spellcheck = false
+    })
+    return
+  }
   if (wc.getType() !== 'webview') return
   registerTab(wc)
   wc.on('context-menu', (_ev, params) => {
     const ctx = ctxForWc(wc)
     if (ctx) showContentMenu(ctx, wc, params)
+  })
+  wc.setWindowOpenHandler(({ url }) => {
+    const c = ctxForWc(wc)
+    if (c && url) sendUi(c, 'open-tab', url)
+    return { action: 'deny' }
   })
   wc.on('dom-ready', () => {
     let host = ''
@@ -942,6 +1025,14 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+  setInterval(gcHiddenWebviews, 45000)
+  const startUrl = process.argv.find((a) => /^https?:\/\//i.test(a))
+  if (startUrl) {
+    setTimeout(() => {
+      const c = currentCtx()
+      if (c) sendUi(c, 'open-tab', startUrl)
+    }, 1500)
+  }
 })
 
 async function runSmoke() {

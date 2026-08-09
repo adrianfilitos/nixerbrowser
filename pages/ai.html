@@ -2,6 +2,7 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'" />
     <title>Asistente IA</title>
     <style>
       :root { --bg:#151518; --bg2:#1c1c20; --bg3:#26262c; --border:#2e2e35; --text:#e9e9ee; --dim:#9c9ca6; --faint:#6c6c76; --accent:#6c7bff; }
@@ -30,11 +31,11 @@
   <body>
     <header>
       <h1>Asistente IA</h1>
-      <span id="status" class="tag">…</span>
+      <span id="status" class="tag">�?�</span>
     </header>
     <main id="chat"></main>
     <footer>
-      <input id="q" placeholder="Haz una pregunta, pide un resumen o que te explique algo…" />
+      <input id="q" placeholder="Haz una pregunta, pide un resumen o que te explique algo�?�" />
       <button id="send">Enviar</button>
     </footer>
     <script>
@@ -69,7 +70,7 @@
         send.disabled = true
         var thinking = document.createElement('div')
         thinking.className = 'msg assistant thinking'
-        thinking.textContent = 'Pensando…'
+        thinking.textContent = 'Pensando�?�'
         chat.appendChild(thinking)
         chat.scrollTop = chat.scrollHeight
         var res = await browserAPI.ai.chat(thread)
@@ -95,7 +96,7 @@
           status.textContent = 'Conectado · ' + (s.aiModel || 'gpt-4o-mini')
           status.className = 'tag'
         } else {
-          status.textContent = 'Sin configurar — ve a Ajustes'
+          status.textContent = 'Sin configurar �?" ve a Ajustes'
           status.className = 'tag warn'
         }
       })
