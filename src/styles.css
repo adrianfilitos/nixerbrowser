@@ -93,6 +93,75 @@ webview.page-view.active {
   pointer-events: auto;
 }
 
+.page-container.splitscreen webview.page-view.active,
+.page-container.splitscreen webview.page-view.split-on {
+  width: 50%;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.page-container.splitscreen webview.page-view.active {
+  left: 0;
+  border-right: 1px solid var(--border);
+}
+
+.page-container.splitscreen webview.page-view.split-on {
+  left: 50%;
+}
+
+.split-exit {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 400;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--pop-bg);
+  color: var(--text-dim);
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+.split-exit:hover {
+  color: var(--text);
+  background: var(--bg3);
+}
+
+.tab-group-stripe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 8px 8px 0 0;
+}
+
+.tab-group-label {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.menu-color-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
 :root.compact .tab-strip { height: 32px; padding-top: 3px; }
 :root.compact .tab { height: 29px; }
 :root.compact .new-tab { height: 29px; }
@@ -181,6 +250,7 @@ webview.page-view.active {
 }
 
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 7px;

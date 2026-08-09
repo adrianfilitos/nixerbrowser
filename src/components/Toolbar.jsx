@@ -50,6 +50,8 @@ export default function Toolbar({
     { icon: I.star, label: 'Marcadores', accel: 'Ctrl+Shift+O', action: () => onOpenPage('bookmarks') },
     { type: 'sep' },
     { icon: I.settings, label: 'Ajustes', accel: 'Ctrl+,', action: () => onOpenPage('settings') },
+    { type: 'sep' },
+    { icon: I.ai, label: 'Acerca de Nixer', action: () => onOpenPage('about') },
   ]
 
   return (

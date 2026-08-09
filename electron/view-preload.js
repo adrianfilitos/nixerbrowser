@@ -72,7 +72,10 @@ contextBridge.exposeInMainWorld('browserAPI', {
     list: () => ipcRenderer.invoke('bookmarks:list'),
     add: (b) => ipcRenderer.invoke('bookmarks:add', b),
     remove: (id) => ipcRenderer.invoke('bookmarks:remove', id),
+    update: (id, patch) => ipcRenderer.invoke('bookmarks:update', id, patch),
     clear: () => ipcRenderer.invoke('bookmarks:clear'),
+    export: () => ipcRenderer.invoke('bookmarks:export'),
+    import: () => ipcRenderer.invoke('bookmarks:import'),
   },
   downloads: {
     list: () => ipcRenderer.invoke('downloads:list'),
@@ -124,6 +127,12 @@ contextBridge.exposeInMainWorld('browserAPI', {
   system: {
     setDefaultBrowser: () => ipcRenderer.invoke('set-default-browser'),
     isDefaultBrowser: () => ipcRenderer.invoke('is-default-browser'),
+  },
+  safe: {
+    allow: (host) => ipcRenderer.invoke('safe:allow', host),
+  },
+  app: {
+    info: () => ipcRenderer.invoke('app:info'),
   },
   openTab: (url) => ipcRenderer.send('create-tab', url),
   onDownloads: (cb) => ipcRenderer.on('downloads-updated', (_e, d) => cb(d)),

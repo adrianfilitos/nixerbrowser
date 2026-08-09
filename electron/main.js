@@ -20,6 +20,12 @@ const nixer = require('./nixer')
 
 nixer.registerScheme()
 
+if (store.settings().doh) {
+  app.commandLine.appendSwitch('enable-features', 'DnsOverHttps')
+  app.commandLine.appendSwitch('dns-over-https-templates', 'https://mozilla.cloudflare-dns.com/dns-query{?dns}')
+  app.commandLine.appendSwitch('dns-over-https-templates-insecure-fallback')
+}
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
@@ -45,6 +51,38 @@ const windows = new Map()
 let nextWindowId = 1
 let extEngine = null
 const pendingExtCreate = []
+
+const SB_CACHE = new Map() // host -> { bad, ts }
+const SB_TTL = 6 * 3600 * 1000
+
+function sbHost(url) {
+  try { return new URL(url).hostname } catch { return null }
+}
+
+async function checkUrl(url, wc) {
+  const host = sbHost(url)
+  if (!host || !wc || wc.isDestroyed()) return
+  const cached = SB_CACHE.get(host)
+  if (cached && Date.now() - cached.ts < SB_TTL) {
+    if (cached.bad) { try { wc.loadURL('nixer://warning?url=' + encodeURIComponent(url)) } catch {} }
+    return
+  }
+  SB_CACHE.set(host, { bad: false, ts: Date.now() })
+  try {
+    const res = await net.fetch('https://urlhaus-api.abuse.ch/v1/url/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'url=' + encodeURIComponent(url),
+      signal: AbortSignal.timeout(7000),
+    })
+    const json = await res.json().catch(() => null)
+    const bad = !!(json && (json.query_status === 'online' || json.query_status === 'offline'))
+    SB_CACHE.set(host, { bad, ts: Date.now() })
+    if (bad && !wc.isDestroyed()) {
+      try { wc.loadURL('nixer://warning?url=' + encodeURIComponent(url)) } catch {}
+    }
+  } catch {}
+}
 
 function setupExtensions() {
   extEngine = new ElectronChromeExtensions({
@@ -93,6 +131,10 @@ function registerTab(wc) {
 
 function fileUrl(p) {
   return 'file://' + path.resolve(p).replace(/\\/g, '/')
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 function ctxFor(event) {
@@ -337,6 +379,7 @@ function showContentMenu(ctx, wc, params) {
   const template = []
   if (params.linkURL) {
     template.push({ label: 'Abrir enlace en pestaña nueva', click: () => sendUi(ctx, 'open-tab', params.linkURL) })
+    template.push({ label: 'Abrir enlace en ventana de incógnito', click: () => { const c2 = createWindow({ incognito: true }); setTimeout(() => sendUi(c2, 'open-tab', params.linkURL), 900) } })
     template.push({ label: 'Copiar dirección del enlace', click: () => { if (wc) wc.copy(params.linkURL) } })
     template.push({ type: 'separator' })
   }
@@ -368,6 +411,11 @@ function showContentMenu(ctx, wc, params) {
   template.push({ label: 'Guardar página como…', click: () => savePageOf(wc) })
   template.push({ label: 'Imprimir', click: () => wc && wc.print({ silent: false, printBackground: true }) })
   template.push({
+    label: 'Capturar pantalla',
+    click: async () => { const f = await captureScreenshot(wc); if (f) console.log('SCREENSHOT_SAVED', f) },
+  })
+  template.push({ label: 'Picture-in-Picture', click: () => togglePip(wc) })
+  template.push({
     label: 'Modo lectura',
     click: async () => {
       const id = await extractReader(wc)
@@ -378,6 +426,53 @@ function showContentMenu(ctx, wc, params) {
   template.push({ label: 'Inspeccionar elemento', click: () => wc && wc.openDevTools() })
   const win = BrowserWindow.fromWebContents(wc)
   if (win) Menu.buildFromTemplate(template).popup({ window: win })
+}
+
+async function captureScreenshot(w) {
+  if (!w) return null
+  try {
+    const img = await w.capturePage()
+    const win = BrowserWindow.fromWebContents(w)
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      defaultPath: 'captura_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.png',
+      filters: [{ name: 'PNG', extensions: ['png'] }],
+    })
+    if (canceled || !filePath) return null
+    fs.writeFileSync(filePath, img.toPNG())
+    return filePath
+  } catch {
+    return null
+  }
+}
+
+function togglePip(w) {
+  if (!w) return
+  try {
+    w.executeJavaScript(`(function () {
+      try {
+        if (document.pictureInPictureElement) { document.exitPictureInPicture(); return 'exit' }
+        var v = document.querySelector('video')
+        if (v && v.requestPictureInPicture) { v.requestPictureInPicture().then(function () {}, function () {}); return 'enter' }
+        return 'none'
+      } catch (e) { return 'err' }
+    })()`)
+  } catch {}
+}
+
+function appInfo() {
+  return {
+    name: 'Nixer Browser',
+    version: app.getVersion(),
+    electron: process.versions.electron,
+    chrome: process.versions.chrome,
+    node: process.versions.node,
+    platform: process.platform,
+    arch: process.arch,
+    userData: app.getPath('userData'),
+    defaultEngine: store.engineById(store.settings().defaultSearchEngine).name,
+    extensions: store.listExtensions().length,
+    adblockDomains: adblock.stats().count || 0,
+  }
 }
 
 function buildMenu() {
@@ -436,6 +531,15 @@ function buildMenu() {
         { type: 'separator' },
         { label: 'Modo lectura', accelerator: 'CmdOrCtrl+Shift+M', click: async () => { const w = wc(); const id = await extractReader(w); if (id) act('open-reader', id) } },
         { label: 'Administrador de tareas', accelerator: 'Shift+Esc', click: () => act('open-taskmanager') },
+        { type: 'separator' },
+        { label: 'Capturar pantalla', accelerator: 'CmdOrCtrl+Shift+S', click: async () => { const f = await captureScreenshot(wc()); if (f) act('ui-toast', { text: 'Captura guardada en ' + f, kind: 'ok' }) } },
+        { label: 'Picture-in-Picture', click: () => togglePip(wc()) },
+      ],
+    },
+    {
+      label: 'Ayuda',
+      submenu: [
+        { label: 'Acerca de Nixer Browser', accelerator: 'F1', click: () => act('open-page', 'about') },
       ],
     },
     {
@@ -896,6 +1000,10 @@ function registerIpc() {
 
   ipcMain.handle('save-page', (e) => { const c = ctxFor(e); if (c) savePageOf(activeWc(c)) })
   ipcMain.handle('print-wc', (e) => { const c = ctxFor(e); const w = c && activeWc(c); if (w) w.print({ silent: false, printBackground: true }) })
+  ipcMain.handle('app:info', () => appInfo())
+  ipcMain.handle('screenshot', async (e) => { const c = ctxFor(e); const w = c && activeWc(c); return captureScreenshot(w) })
+  ipcMain.handle('pip', (e) => { const c = ctxFor(e); togglePip(c && activeWc(c)); return true })
+  ipcMain.handle('safe:allow', (_e, host) => { if (host) SB_CACHE.delete(host); return true })
   ipcMain.handle('save-as', async (e, url) => { const c = ctxFor(e); if (c) await saveAsUrl(c.win, url) })
   ipcMain.handle('reader-mode', async (e) => { const c = ctxFor(e); return extractReader(activeWc(c)) })
 
@@ -922,6 +1030,39 @@ function registerIpc() {
   ipcMain.handle('bookmarks:list', () => store.listBookmarks())
   ipcMain.handle('bookmarks:add', (_e, b) => store.addBookmark(b))
   ipcMain.handle('bookmarks:remove', (_e, id) => store.removeBookmark(id))
+  ipcMain.handle('bookmarks:update', (_e, id, patch) => store.updateBookmark(id, patch))
+  ipcMain.handle('bookmarks:export', async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      defaultPath: 'marcadores.html',
+      filters: [{ name: 'HTML', extensions: ['html'] }],
+    })
+    if (canceled || !filePath) return false
+    const rows = store
+      .listBookmarks()
+      .map((b) => `    <DT><A HREF="${escapeHtml(b.url)}">${escapeHtml(b.title || b.url)}</A>` + (b.folder ? ` [${escapeHtml(b.folder)}]` : '') + `</DT>`)
+      .join('\n')
+    const html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Marcadores</TITLE>\n<H1>Marcadores</H1>\n<DL><p>\n${rows}\n</DL><p>\n`
+    fs.writeFileSync(filePath, html, 'utf8')
+    return true
+  })
+  ipcMain.handle('bookmarks:import', async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'HTML', extensions: ['html'] }] })
+    if (canceled || !filePaths || !filePaths[0]) return 0
+    const html = fs.readFileSync(filePaths[0], 'utf8')
+    const links = [...html.matchAll(/<A\s+HREF=["']([^"']+)["'][^>]*>([^<]*)<\/A>/gi)]
+    let folder = ''
+    let count = 0
+    for (const m of links) {
+      const url = m[1]
+      if (!url || !/^https?:\/\//.test(url)) continue
+      const title = (m[2] || '').trim()
+      store.addBookmark({ url, title: title || url, folder })
+      count++
+    }
+    return count
+  })
   ipcMain.handle('bookmarks:clear', () => { const ids = store.listBookmarks().map((b) => b.id); ids.forEach((id) => store.removeBookmark(id)) })
   ipcMain.handle('bookmarks:is-bookmarked', (_e, url) => store.isBookmarked(url))
   ipcMain.handle('history:list', (_e, q) => store.searchHistory(q, 200))
@@ -1069,6 +1210,18 @@ app.on('web-contents-created', (_e, wc) => {
   wc.on('context-menu', (_ev, params) => {
     const ctx = ctxForWc(wc)
     if (ctx) showContentMenu(ctx, wc, params)
+  })
+  wc.on('did-start-navigation', (_e, url, _isInPlace, isMainFrame) => {
+    if (isMainFrame && url && /^https?:/.test(url) && store.settings().safeBrowsing !== false) checkUrl(url, wc)
+  })
+  wc.on('will-navigate', (e, url) => {
+    if (store.settings().safeBrowsing === false) return
+    const host = sbHost(url)
+    const cached = host && SB_CACHE.get(host)
+    if (cached && cached.bad) {
+      e.preventDefault()
+      try { wc.loadURL('nixer://warning?url=' + encodeURIComponent(url)) } catch {}
+    }
   })
   wc.setWindowOpenHandler(({ url }) => {
     const c = ctxForWc(wc)

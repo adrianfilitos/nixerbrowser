@@ -330,6 +330,14 @@
               <div class="control"><label class="switch"><input type="checkbox" id="memorySaver" /><span class="track"><span class="thumb"></span></span></label></div>
             </div>
             <div class="field">
+              <div class="meta"><div class="label">DNS sobre HTTPS</div><div class="desc">Resuelve dominios cifrado (Cloudflare). Requiere reiniciar la app</div></div>
+              <div class="control"><label class="switch"><input type="checkbox" id="doh" /><span class="track"><span class="thumb"></span></span></label></div>
+            </div>
+            <div class="field">
+              <div class="meta"><div class="label">Navegación segura</div><div class="desc">Avisa antes de abrir sitios de malware o phishing (URLhaus)</div></div>
+              <div class="control"><label class="switch"><input type="checkbox" id="safeBrowsing" /><span class="track"><span class="thumb"></span></span></label></div>
+            </div>
+            <div class="field">
               <div class="meta"><div class="label">Contraseñas guardadas</div><div class="desc">Ver y gestionar credenciales</div></div>
               <div class="control"><button class="btn" id="openPasswords">Gestionar contraseñas</button></div>
             </div>
@@ -446,6 +454,8 @@
         document.getElementById('downloadPath').value = settings.downloadPath || ''
         document.getElementById('defaultZoom').value = String(settings.defaultZoom || 1)
         document.getElementById('memorySaver').checked = settings.memorySaver !== false
+        document.getElementById('doh').checked = settings.doh !== false
+        document.getElementById('safeBrowsing').checked = settings.safeBrowsing !== false
         var af = settings.autofillProfile || {}
         document.getElementById('afName').value = af.name || ''
         document.getElementById('afEmail').value = af.email || ''
@@ -659,6 +669,14 @@
         document.getElementById('memorySaver').addEventListener('change', function () {
           settings.memorySaver = this.checked
           persist({ memorySaver: this.checked })
+        })
+        document.getElementById('doh').addEventListener('change', function () {
+          settings.doh = this.checked
+          persist({ doh: this.checked }).then(function () { toast('Se aplicará al reiniciar la app') })
+        })
+        document.getElementById('safeBrowsing').addEventListener('change', function () {
+          settings.safeBrowsing = this.checked
+          persist({ safeBrowsing: this.checked })
         })
         var afIds = ['afName', 'afEmail', 'afPhone', 'afCompany', 'afAddress', 'afCity', 'afZip']
         afIds.forEach(function (id) {

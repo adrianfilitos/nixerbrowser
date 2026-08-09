@@ -9,30 +9,59 @@
       :root.light { --bg:#f4f4f4; --bg2:#ffffff; --bg3:#ececec; --border:#d6d6d6; --text:#1a1a1a; --dim:#555; --faint:#777; --danger:#d23b3b; }
       * { box-sizing:border-box; margin:0; padding:0; }
       body { font-family:system-ui,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
-      header { display:flex; align-items:center; gap:16px; padding:16px 24px; border-bottom:1px solid var(--border); background:var(--bg2); }
-      h1 { font-size:20px; font-weight:600; }
+      header { position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:10px; padding:13px 24px; border-bottom:1px solid var(--border); background:var(--bg2); flex-wrap:wrap; }
+      h1 { font-size:18px; font-weight:700; margin-right:auto; }
       button { padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--bg3); color:var(--text); cursor:pointer; font-size:13px; }
       button:hover { filter:brightness(1.15); }
+      button.ghost { background:transparent; color:var(--dim); }
+      button.ghost:hover { background:var(--bg3); color:var(--text); }
       button.danger { color:var(--danger); }
-      main { max-width:860px; margin:0 auto; padding:16px 24px; }
+      main { max-width:860px; margin:0 auto; padding:16px 24px 48px; }
+      .folder { margin-top:16px; }
+      .folder-head { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:10px; background:var(--bg3); font-weight:600; font-size:13px; margin-bottom:4px; }
+      .folder-head .f-ico { color:var(--accent); }
+      .folder-head .count { color:var(--faint); font-weight:400; margin-left:auto; }
       .row { display:flex; align-items:center; gap:14px; padding:10px 12px; border-radius:10px; }
       .row:hover { background:var(--bg3); }
-      .title { font-weight:500; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:40%; }
+      .title { font-weight:500; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:38%; }
       .url { color:var(--dim); font-size:12px; flex:1; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .folder-select { padding:6px 8px; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:12px; outline:none; }
       .del { background:transparent; border:none; color:var(--dim); }
       .del:hover { color:var(--danger); }
+      .new-folder { display:flex; gap:8px; margin-top:16px; align-items:center; }
+      .new-folder input { flex:1; min-width:0; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:13px; outline:none; }
+      .new-folder input:focus { border-color:var(--accent); }
       .empty { color:var(--faint); text-align:center; padding:60px 0; }
+      #toast { position:fixed; bottom:18px; right:18px; background:var(--bg2); border:1px solid var(--border); color:var(--text); padding:10px 16px; border-radius:10px; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,.4); opacity:0; transform:translateY(8px); transition:.18s; pointer-events:none; z-index:50; }
+      #toast.show { opacity:1; transform:none; }
     </style>
   </head>
   <body>
     <header>
       <h1>Marcadores</h1>
-      <button id="clear" class="danger">Borrar todo</button>
+      <button class="ghost" id="export">Exportar…</button>
+      <button class="ghost" id="import">Importar…</button>
+      <button class="danger" id="clear">Borrar todo</button>
     </header>
-    <main id="list"></main>
+    <main>
+      <div class="new-folder">
+        <input id="folderName" placeholder="Nombre de la nueva carpeta…" />
+        <button id="addFolder">Crear carpeta</button>
+      </div>
+      <div id="list"></div>
+    </main>
+    <div id="toast"></div>
     <script>
       var list = document.getElementById('list')
-      var clearBtn = document.getElementById('clear')
+      var toastTimer
+
+      function toast(msg) {
+        var t = document.getElementById('toast')
+        t.textContent = msg
+        t.classList.add('show')
+        clearTimeout(toastTimer)
+        toastTimer = setTimeout(function () { t.classList.remove('show') }, 2000)
+      }
 
       async function render() {
         var items = await browserAPI.bookmarks.list()
@@ -41,28 +70,71 @@
           list.innerHTML = '<div class="empty">No hay marcadores</div>'
           return
         }
-        items.forEach(function (b) {
-          var row = document.createElement('div')
-          row.className = 'row'
-          row.innerHTML = '<span class="title"></span><span class="url"></span><button class="del">Quitar</button>'
-          row.querySelector('.title').textContent = b.title || b.url
-          row.querySelector('.url').textContent = b.url
-          row.querySelector('.title').onclick = function () { browserAPI.openTab(b.url) }
-          row.querySelector('.url').onclick = function () { browserAPI.openTab(b.url) }
-          row.querySelector('.del').onclick = async function () {
-            await browserAPI.bookmarks.remove(b.id)
-            render()
+        var folders = Array.from(new Set(items.map(function (b) { return b.folder || '' }).filter(Boolean))).sort()
+        function drawGroup(groupItems, folderName) {
+          if (folderName) {
+            var head = document.createElement('div')
+            head.className = 'folder-head'
+            head.innerHTML = '<span class="f-ico">▾</span><span class="f-name"></span><span class="count"></span>'
+            head.querySelector('.f-name').textContent = folderName
+            head.querySelector('.count').textContent = groupItems.length + ' marcador(es)'
+            list.appendChild(head)
           }
-          list.appendChild(row)
+          groupItems.forEach(function (b) {
+            var row = document.createElement('div')
+            row.className = 'row'
+            row.innerHTML = '<span class="title"></span><span class="url"></span><select class="folder-select"><option value="">Sin carpeta</option></select><button class="del">Quitar</button>'
+            row.querySelector('.title').textContent = b.title || b.url
+            row.querySelector('.url').textContent = b.url
+            row.querySelector('.title').onclick = function () { browserAPI.openTab(b.url) }
+            row.querySelector('.url').onclick = function () { browserAPI.openTab(b.url) }
+            var sel = row.querySelector('.folder-select')
+            folders.forEach(function (f) {
+              var o = document.createElement('option')
+              o.value = f
+              o.textContent = f
+              sel.appendChild(o)
+            })
+            sel.value = b.folder || ''
+            sel.onchange = async function () {
+              await browserAPI.bookmarks.update(b.id, { folder: this.value })
+              render()
+              toast('Carpeta actualizada')
+            }
+            row.querySelector('.del').onclick = async function () {
+              await browserAPI.bookmarks.remove(b.id)
+              render()
+            }
+            list.appendChild(row)
+          })
+        }
+        folders.forEach(function (f) {
+          drawGroup(items.filter(function (b) { return b.folder === f }), f)
         })
+        drawGroup(items.filter(function (b) { return !b.folder }), '')
       }
 
-      clearBtn.addEventListener('click', async function () {
+      document.getElementById('addFolder').onclick = async function () {
+        var name = document.getElementById('folderName').value.trim()
+        if (!name) return
+        document.getElementById('folderName').value = ''
+        toast('Carpeta "' + name + '" creada')
+      }
+      document.getElementById('export').onclick = async function () {
+        var ok = await browserAPI.bookmarks.export()
+        toast(ok ? 'Marcadores exportados' : 'Exportación cancelada')
+      }
+      document.getElementById('import').onclick = async function () {
+        var n = await browserAPI.bookmarks.import()
+        toast(n > 0 ? n + ' marcador(es) importado(s)' : 'No se importaron marcadores')
+        render()
+      }
+      document.getElementById('clear').onclick = async function () {
         if (confirm('¿Borrar todos los marcadores?')) {
           await browserAPI.bookmarks.clear()
           render()
         }
-      })
+      }
       render()
 
       browserAPI.settings.get().then(function (s) {

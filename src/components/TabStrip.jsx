@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ContextMenu from './ContextMenu.jsx'
 import WindowControls from './WindowControls.jsx'
 import { I } from './icons.jsx'
 
-export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore }) {
+export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore, onGroup, splitWith, onSplit }) {
   const [menu, setMenu] = useState(null)
   const [manageOpen, setManageOpen] = useState(false)
   let dragId = null
+  const colorSeq = useRef(0)
+  const GROUP_COLORS = ['#e05252', '#d99a2b', '#3da26e', '#4a7bd0', '#8b5cf6', '#c4458c']
 
   useEffect(() => {
     onOverlayChange(!!menu || manageOpen)
@@ -69,9 +71,30 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
     setMenu({ x: e.clientX, y: e.clientY, tab })
   }
 
+  const groups = Array.from(new Map(tabs.filter((t) => t.group).map((t) => [t.group.id, t.group])).values())
+
   const menuItems = menu
     ? [
         { icon: I.plus, label: 'Nueva pestaña', accel: 'Ctrl+T', action: () => onNew() },
+        { sep: true },
+        { icon: I.window, label: splitWith ? 'Salir de la vista dividida' : 'Ver en vista dividida', action: () => { onSplit(menu.tab.id); setMenu(null) } },
+        ...(menu.tab.group
+          ? [{ icon: I.pin, label: 'Quitar del grupo', action: () => { onGroup(menu.tab.id, null); setMenu(null) } }]
+          : []),
+        ...groups.filter((g) => !menu.tab.group || g.id !== menu.tab.group.id).map((g) => ({
+          icon: <span className="menu-color-dot" style={{ background: g.color }} />,
+          label: 'Añadir al grupo: ' + g.label,
+          action: () => { onGroup(menu.tab.id, g); setMenu(null) },
+        })),
+        {
+          icon: I.plus,
+          label: 'Crear nuevo grupo',
+          action: () => {
+            const c = GROUP_COLORS[colorSeq.current++ % GROUP_COLORS.length]
+            onGroup(menu.tab.id, { id: 'g' + Date.now(), label: (menu.tab.title || 'Grupo').slice(0, 14), color: c })
+            setMenu(null)
+          },
+        },
         { sep: true },
         { icon: I.pin, label: menu.tab.pinned ? 'Desfijar pestaña' : 'Fijar pestaña', action: () => onPin(menu.tab.id) },
         { icon: I.copy, label: 'Duplicar pestaña', action: () => onNewUrl(menu.tab.url) },
@@ -101,6 +124,8 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
             onContextMenu={(e) => openMenu(e, t)}
             title={t.title || 'Nueva pestaña'}
           >
+            {t.group && <span className="tab-group-stripe" style={{ background: t.group.color }} />}
+            {t.group && <span className="tab-group-label" style={{ background: t.group.color }}>{t.group.label.slice(0, 1).toUpperCase()}</span>}
             {t.favicon ? (
               <img className="favicon" src={t.favicon} alt="" />
             ) : (
@@ -155,6 +180,9 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
               </div>
               <div className="tm-actions">
                 <button className="tm-action" onClick={() => { setManageOpen(false); onNew() }}>Nueva pestaña</button>
+                <button className="tm-action" onClick={() => { setManageOpen(false); onSplit(activeTab && activeTab.id) }}>
+                  {splitWith ? 'Salir de la vista dividida' : 'Dividir pantalla'}
+                </button>
                 <button className="tm-action" onClick={closeOthers} disabled={tabs.length < 2}>Cerrar otras pestañas</button>
                 <button className="tm-action" onClick={closeToRight} disabled={activeIdx < 0 || activeIdx === tabs.length - 1}>Cerrar pestañas a la derecha</button>
                 <button className="tm-action danger" onClick={closeAll} disabled={tabs.length === 0}>Cerrar todas las pestañas</button>

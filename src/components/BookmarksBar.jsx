@@ -18,9 +18,18 @@ export default function BookmarksBar({ bookmarks, onNavigate, onRemove, onOverla
       ]
     : []
 
+  const folderless = bookmarks.filter((b) => !b.folder).slice(0, 30)
+  const folders = Array.from(new Set(bookmarks.map((b) => b.folder).filter(Boolean)))
+
   return (
     <div className="bookmarks-bar">
-      {bookmarks.slice(0, 30).map((b) => (
+      {folders.map((f) => (
+        <div key={'f:' + f} className="bm-item bm-folder" title={'Carpeta: ' + f + ' (ver marcadores)'} onClick={() => onNavigate('nixer://bookmarks')}>
+          <span className="bm-dot" style={{ background: 'var(--accent)' }} />
+          <span className="bm-name">{f}</span>
+        </div>
+      ))}
+      {folderless.map((b) => (
         <div
           key={b.id}
           className="bm-item"

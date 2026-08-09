@@ -1,4 +1,11 @@
 const { app, BrowserWindow } = require('electron')
+const path = require('path')
+const fs = require('fs')
+const os = require('os')
+
+process.env.NIXER_USER_DATA = path.join(os.tmpdir(), 'nixer-leak-profile')
+fs.rmSync(process.env.NIXER_USER_DATA, { recursive: true, force: true })
+
 require('./main')
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))

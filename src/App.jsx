@@ -33,6 +33,8 @@ const PAGE_TITLES = {
   welcome: 'Bienvenida',
   passwords: 'Contraseñas',
   extensions: 'Extensiones',
+  about: 'Acerca de Nixer',
+  warning: 'Aviso de seguridad',
 }
 
 let tabSeq = 1
@@ -55,6 +57,7 @@ export default function App() {
   const [siteInfoUrl, setSiteInfoUrl] = useState(null)
   const [siteInfoAnchor, setSiteInfoAnchor] = useState(null)
   const [taskManagerOpen, setTaskManagerOpen] = useState(false)
+  const [splitWith, setSplitWith] = useState(null)
   const [permission, setPermission] = useState(null)
   const [savePrompt, setSavePrompt] = useState(null)
   const [urlOverrides, setUrlOverrides] = useState({})
@@ -195,6 +198,7 @@ export default function App() {
       internal: opts.internal || internalForSrc(src),
       wcId: null,
       active: false,
+      group: null,
     }
     setTabs((prev) => prev.map((t) => ({ ...t, active: false })).concat(tab))
     requestAnimationFrame(() => activate(id))
@@ -247,6 +251,18 @@ export default function App() {
     scheduleSessionSave()
   }
 
+  function toggleSplit(id) {
+    setSplitWith((cur) => {
+      if (cur) return null
+      const other = id || (tabs.find((t) => !t.active) || {}).id || null
+      return other
+    })
+  }
+
+  function setTabGroup(id, group) {
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, group } : t)))
+  }
+
   function createTabObject() {
     const src = computeSrc('')
     const id = Date.now() + '-' + tabSeq++
@@ -260,6 +276,7 @@ export default function App() {
       internal: internalForSrc(src),
       wcId: null,
       active: true,
+      group: null,
     }
   }
 
@@ -550,6 +567,9 @@ export default function App() {
           onSelect={switchTab}
           onClose={closeTab}
           onCloseAll={closeAllTabs}
+          onGroup={setTabGroup}
+          splitWith={splitWith}
+          onSplit={toggleSplit}
           onPin={(id) => setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t)))}
           onNewUrl={(url) => addTab(url)}
           onRestore={() => restoreTab()}
@@ -601,7 +621,7 @@ export default function App() {
         />
       </div>
 
-      <div className="page-container">
+      <div className={'page-container' + (splitWith ? ' splitscreen' : '')}>
         {ready && tabs.map((t) => (
           <webview
             key={t.id}
@@ -614,9 +634,14 @@ export default function App() {
             src={t.src}
             partition={incognitoRef.current ? 'navegador-incognito' : undefined}
             preload={viewInfoRef.current.preload || undefined}
-            className={'page-view' + (t.active ? ' active' : '')}
+            className={'page-view' + (t.active ? ' active' : '') + (splitWith === t.id ? ' split-on' : '')}
           />
         ))}
+        {splitWith && (
+          <button className="split-exit" title="Salir de la vista dividida" onClick={() => setSplitWith(null)}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
+        )}
       </div>
 
       {shieldsOrigin && <ShieldsPopup origin={shieldsOrigin} anchor={shieldsAnchor} onClose={() => { setShieldsOrigin(null); setShieldsAnchor(null) }} />}

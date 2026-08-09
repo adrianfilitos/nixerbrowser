@@ -43,6 +43,8 @@ const DEFAULT_SETTINGS = {
   greeting: '',
   compact: false,
   memorySaver: true,
+  doh: true,
+  safeBrowsing: true,
   defaultZoom: 1,
   downloadPath: '',
   autofillProfile: { name: '', email: '', phone: '', company: '', address: '', city: '', zip: '' },
@@ -129,7 +131,7 @@ function searchBookmarks(q, limit) {
 }
 
 function addBookmark(b) {
-  const rec = { id: Date.now() + '-' + Math.floor(Math.random() * 1e4), url: b.url, title: b.title || b.url, ts: Date.now() }
+  const rec = { id: Date.now() + '-' + Math.floor(Math.random() * 1e4), url: b.url, title: b.title || b.url, folder: b.folder || '', ts: Date.now() }
   state.bookmarks.unshift(rec)
   persist('bookmarks')
   return rec
@@ -138,6 +140,16 @@ function addBookmark(b) {
 function removeBookmark(id) {
   state.bookmarks = state.bookmarks.filter((b) => b.id !== id)
   persist('bookmarks')
+}
+
+function updateBookmark(id, patch) {
+  const b = state.bookmarks.find((x) => x.id === id)
+  if (b) {
+    if ('title' in patch) b.title = patch.title
+    if ('url' in patch) b.url = patch.url
+    if ('folder' in patch) b.folder = patch.folder
+    persist('bookmarks')
+  }
 }
 
 function isBookmarked(url) {
@@ -299,6 +311,7 @@ module.exports = {
   searchBookmarks,
   addBookmark,
   removeBookmark,
+  updateBookmark,
   isBookmarked,
   toggleBookmark,
   closedTabs,

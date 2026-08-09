@@ -21,6 +21,7 @@
     "test:extmenu": "electron electron/test-extmenu.js",
     "test:tabs": "electron electron/test-tabs.js",
     "test:leak": "electron electron/test-leak.js",
+    "test:features": "electron electron/test-features.js",
     "test:close": "electron electron/test-close.js",
     "test:ui": "electron electron/test-ui.js",
     "test:smoke": "npm run build && cross-env SMOKE=1 electron ."
