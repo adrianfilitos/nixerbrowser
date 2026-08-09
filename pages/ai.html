@@ -42,7 +42,7 @@
       var chat = document.getElementById('chat')
       var q = document.getElementById('q')
       var send = document.getElementById('send')
-      var status = document.getElementById('status')
+      var statusEl = document.getElementById('status')
       var thread = []
 
       function render() {
@@ -93,11 +93,11 @@
 
       browserAPI.settings.get().then(function (s) {
         if (s.aiBaseUrl && s.aiApiKey) {
-          status.textContent = 'Conectado · ' + (s.aiModel || 'gpt-4o-mini')
-          status.className = 'tag'
+          statusEl.textContent = 'Conectado · ' + (s.aiModel || 'gpt-4o-mini')
+          statusEl.className = 'tag'
         } else {
-          status.textContent = 'Sin configurar — ve a Ajustes'
-          status.className = 'tag warn'
+          statusEl.textContent = 'Sin configurar — ve a Ajustes'
+          statusEl.className = 'tag warn'
         }
       })
 

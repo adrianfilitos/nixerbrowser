@@ -166,6 +166,11 @@ function registerIpc() {
     if (c) ctx.sendUi(c, 'open-tab', url || '')
   })
 
+  ipcMain.on('open-page', (e, key) => {
+    const c = ctx.ctxFor(e)
+    if (c) ctx.sendUi(c, 'open-page', key)
+  })
+
   ipcMain.on('login-submit', (e, cred) => {
     const c = ctx.ctxFor(e)
     if (!c || c.incognito || !store.settings().offerPasswordSave) return

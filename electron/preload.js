@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('api', {
   taskManagerList: () => ipcRenderer.invoke('taskmanager:list'),
 
   autocomplete: (q) => ipcRenderer.invoke('autocomplete:query', q),
+  aiChat: (messages) => ipcRenderer.invoke('ai:chat', messages),
+  openPage: (key) => ipcRenderer.send('open-page', key),
   getBookmarks: () => ipcRenderer.invoke('bookmarks:list'),
   addBookmark: (b) => ipcRenderer.invoke('bookmarks:add', b),
   removeBookmark: (id) => ipcRenderer.invoke('bookmarks:remove', id),

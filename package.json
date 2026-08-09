@@ -25,6 +25,7 @@
     "test:security": "electron electron/test-security.js",
     "test:incognito": "electron electron/test-incognito.js",
     "test:settings": "electron electron/test-settings.js",
+    "test:ai": "electron electron/test-ai.js",
     "test:close": "electron electron/test-close.js",
     "test:ui": "electron electron/test-ui.js",
     "test:smoke": "npm run build && cross-env SMOKE=1 electron ."
