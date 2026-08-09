@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, session, shell, dialog, webContents, screen } = require('electron')
+const { app, BrowserWindow, ipcMain, session, shell, dialog, webContents, screen, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
 const crypto = require('crypto')
 const { DEV_SERVER_URL, PRIVATE_PARTITION, PROFILE } = require('./constants')
 
@@ -10,7 +11,7 @@ app.commandLine.appendSwitch('disable-features', 'OptimizationHints,MediaRouter,
 app.setName('Nixer Browser')
 app.setAppUserModelId('com.nixer.browser')
 if (process.env.SMOKE === '1' && !process.env.NIXER_USER_DATA) {
-  process.env.NIXER_USER_DATA = path.join(require('os').tmpdir(), 'nixer-smoke-profile')
+  process.env.NIXER_USER_DATA = path.join(os.tmpdir(), 'nixer-smoke-profile')
 }
 const userDataBase = PROFILE === 'default' ? path.join(app.getPath('appData'), 'navegador') : path.join(app.getPath('appData'), 'navegador-profiles', PROFILE)
 app.setPath('userData', process.env.NIXER_USER_DATA || userDataBase)
@@ -125,13 +126,17 @@ function openUrlInWindow(wctx, url) {
   wc.once('did-finish-load', () => setTimeout(send, 200))
 }
 
-function detachFromDrag(srcCtx) {
-  if (!dragState || !dragState.url) return
-  const st = dragState
-  const wctx = createWindow({ incognito: srcCtx ? srcCtx.incognito : false })
+function moveTabToNewWindow(srcCtx, st, pos) {
+  const wctx = createWindow({ incognito: srcCtx ? srcCtx.incognito : false, x: pos && pos.x, y: pos && pos.y })
   openUrlInWindow(wctx, st.url)
   if (srcCtx && st.tabId) ctx.sendUi(srcCtx, 'close-tab-by-id', st.tabId)
   dragState = null
+  return wctx
+}
+
+function detachFromDrag(srcCtx) {
+  if (!dragState || !dragState.url) return
+  moveTabToNewWindow(srcCtx, dragState)
 }
 
 function tearoffWindowAt(sx, sy) {
@@ -151,11 +156,8 @@ function tearOff(srcCtx, sx, sy) {
   const cx = typeof sx === 'number' ? sx : p.x
   const cy = typeof sy === 'number' ? sy : p.y
   const pos = tearoffWindowAt(cx, cy)
-  const wctx = createWindow({ incognito: srcCtx ? srcCtx.incognito : false, x: pos.x, y: pos.y })
-  openUrlInWindow(wctx, st.url)
-  if (srcCtx && st.tabId) ctx.sendUi(srcCtx, 'close-tab-by-id', st.tabId)
+  moveTabToNewWindow(srcCtx, st, pos)
   closeDragTarget()
-  dragState = null
 }
 
 if (store.settings().hardwareAcceleration === false) {
@@ -272,6 +274,7 @@ function registerIpc() {
       newtab: 'nixer://newtab',
       welcome: 'nixer://welcome',
       pages: 'nixer://pages/',
+      privatePartition: PRIVATE_PARTITION,
     }
   })
   ipcMain.handle('window-info', (e) => {
@@ -326,14 +329,11 @@ function registerIpc() {
     const srcCtx = ctx.ctxFor(e)
     tearOff(srcCtx, typeof sx === 'number' ? sx : undefined, typeof sy === 'number' ? sy : undefined)
   })
-  ipcMain.handle('get-drag-state', () => dragState ? { id: dragState.id, winId: dragState.winId } : null)
+  ipcMain.handle('get-drag-state', () => dragState ? { winId: dragState.winId } : null)
   ipcMain.handle('dock-dragged', (e) => {
     const target = ctx.ctxFor(e)
     if (!target || !dragState || dragState.winId === target.id) return false
-    if (dragState.url) ctx.sendUi(target, 'open-tab-bg', dragState.url)
-    const sourceCtx = dragState.win ? ctx.windows.get(dragState.win) : null
-    if (sourceCtx && dragState.tabId) ctx.sendUi(sourceCtx, 'close-tab-by-id', dragState.tabId)
-    dragState = null
+    dockInto(target)
     return true
   })
   ipcMain.on('set-active-wc', (e, wcId) => {
@@ -382,7 +382,7 @@ function registerIpc() {
     const c = ctx.ctxFor(e)
     const w = c && ctx.activeWc(c)
     if (!w) return
-    const p = store.settings().autofillProfile || {}
+    const p = store.decryptProfile(store.settings().autofillProfile)
     const data = { name: p.name || '', email: p.email || '', phone: p.phone || '', company: p.company || '', address: p.address || '', city: p.city || '', zip: p.zip || '' }
     w.executeJavaScript(`(() => {
       const data = ${JSON.stringify(data)}
@@ -567,10 +567,7 @@ function registerIpc() {
   ipcMain.handle('save-page', (e) => { const c = ctx.ctxFor(e); if (c) downloads.savePageOf(ctx.activeWc(c)) })
   ipcMain.handle('print-wc', (e) => { const c = ctx.ctxFor(e); const w = c && ctx.activeWc(c); if (w) w.print({ silent: false, printBackground: true }) })
   ipcMain.handle('app:info', () => util.appInfo())
-  ipcMain.handle('screenshot', async (e) => { const c = ctx.ctxFor(e); const w = c && ctx.activeWc(c); return util.captureScreenshot(w) })
-  ipcMain.handle('pip', (e) => { const c = ctx.ctxFor(e); util.togglePip(c && ctx.activeWc(c)); return true })
   ipcMain.handle('safe:allow', (_e, host) => safeBrowsing.clearHost(host))
-  ipcMain.handle('save-as', async (e, url) => { const c = ctx.ctxFor(e); if (c) await downloads.saveAsUrl(c.win, url) })
   ipcMain.handle('reader-mode', async (e) => { const c = ctx.ctxFor(e); return reader.extractReader(ctx.activeWc(c)) })
 
   ipcMain.handle('taskmanager:list', async () => {
@@ -748,7 +745,7 @@ function registerIpc() {
   ipcMain.handle('downloads:open', (_e, p) => { if (p) { try { shell.openPath(p) } catch {} } return true })
   ipcMain.handle('downloads:show', (_e, p) => { if (p) { try { shell.showItemInFolder(p) } catch {} } return true })
   ipcMain.handle('downloads:folder', (_e, p) => { if (p) { try { shell.openPath(path.dirname(p)) } catch {} } return true })
-  ipcMain.handle('downloads:cancel', () => true)
+  ipcMain.handle('downloads:cancel', (_e, id) => downloads.cancelDownload(id))
   ipcMain.handle('settings:get', () => util.settingsForUi())
   ipcMain.handle('settings:defaults', () => store.settingsDefaults())
   ipcMain.handle('settings:set', (_e, patch) => {
@@ -774,15 +771,15 @@ function registerIpc() {
   ipcMain.handle('adblock:stats', () => adblock.stats())
   ipcMain.handle('adblock:refresh', () => { adblock.refresh(); return true })
   ipcMain.handle('adblock:recent', () => adblock.recentLog())
+  ipcMain.handle('adblock:cosmetic', (_e, host) => adblock.cosmeticCss(host))
   ipcMain.handle('shields:get', (_e, origin) => {
-    const s = store.settings()
-    const shields = (s.siteShields && s.siteShields[origin]) || {}
+    const g = guardState(origin)
     const blocked = adblock.stats().blocked[origin] || { ads: 0, scripts: 0, trackers: 0 }
     return {
       origin,
-      blockAds: shields.blockAds !== undefined ? shields.blockAds : s.blockAds,
-      blockScripts: shields.blockScripts !== undefined ? shields.blockScripts : s.blockScripts,
-      blockCookies: s.blockThirdPartyCookies,
+      blockAds: g.blockAds,
+      blockScripts: g.blockScripts,
+      blockCookies: g.blockThirdPartyCookies,
       ads: blocked.ads || 0,
       scripts: blocked.scripts || 0,
       trackers: blocked.trackers || 0,

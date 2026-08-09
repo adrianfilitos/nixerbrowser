@@ -56,10 +56,26 @@ function injectContentScripts() {
   })
 }
 
+function injectCosmetic() {
+  if (window !== window.top) return
+  if (!/^https?:/.test(location.href)) return
+  const host = location.hostname.toLowerCase()
+  ipcRenderer.invoke('adblock:cosmetic', host).then((css) => {
+    if (!css) return
+    try {
+      const st = document.createElement('style')
+      st.type = 'text/css'
+      st.textContent = css
+      ;(document.head || document.documentElement).appendChild(st)
+    } catch {}
+  }).catch(() => {})
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   detectLoginSubmit()
   setupAutofill()
   injectContentScripts()
+  injectCosmetic()
 })
 
 const IS_INTERNAL_PAGE = /^(nixer:|file:)/.test(location.href)
@@ -168,6 +184,10 @@ if (IS_INTERNAL_PAGE) {
     remove: (name) => ipcRenderer.invoke('workspaces:delete', name),
   },
   openTab: (url) => ipcRenderer.send('create-tab', url),
-  onDownloads: (cb) => ipcRenderer.on('downloads-updated', (_e, d) => cb(d)),
+  onDownloads: (cb) => {
+    const l = (_e, d) => cb(d)
+    ipcRenderer.on('downloads-updated', l)
+    return () => ipcRenderer.removeListener('downloads-updated', l)
+  },
   })
 }

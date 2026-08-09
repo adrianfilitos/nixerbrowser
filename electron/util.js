@@ -23,15 +23,25 @@ function hostOf(url) {
 }
 
 function broadcastDownloads() {
+  const list = store.downloads()
   for (const ctx of windows.values()) {
     const t = ui(ctx)
-    if (t && !t.isDestroyed()) t.send('downloads-updated', store.downloads())
+    if (t && !t.isDestroyed()) t.send('downloads-updated', list)
+  }
+  // webviews internos (página de Descargas) también reciben el estado en vivo
+  for (const wc of webContents.getAllWebContents()) {
+    if (!wc.hostWebContents) continue
+    const u = wc.getURL()
+    if (u.startsWith('nixer://') || u.startsWith('file:')) {
+      try { wc.send('downloads-updated', list) } catch {}
+    }
   }
 }
 
 function settingsForUi() {
   const s = { ...store.settings() }
   s.aiApiKey = store.decryptSecret(s.aiApiKey)
+  s.autofillProfile = store.decryptProfile(s.autofillProfile)
   return s
 }
 

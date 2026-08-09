@@ -30,27 +30,6 @@ function readVarint(buf, off) {
   return [v, off + n]
 }
 
-function readCellPayload(db, cellOff, usable) {
-  const [len, off] = readVarint(db, cellOff)
-  const [rowid, off2] = readVarint(db, off)
-  const local = Math.min(len, usable - 35)
-  let payload = Buffer.from(db.subarray(off2, off2 + local))
-  let nextOff = off2 + local
-  if (len > local) {
-    // overflow chain
-    let nextPage = db.readUInt32BE(nextOff)
-    while (nextPage !== 0) {
-      const po = pageOffset({ db, pageSize: usable === 0 ? 4096 : guessSize(db) }, nextPage) // page size needed
-      break
-    }
-  }
-  return { len, rowid, payload, hasOverflow: len > local }
-}
-
-function guessSize(db) {
-  return db.readUInt16BE(16) || 4096
-}
-
 function readSerialTypes(db, start) {
   const [hdrLen, p] = readVarint(db, start)
   const types = []

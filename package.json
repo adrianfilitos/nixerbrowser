@@ -14,6 +14,8 @@
     "postdist": "node scripts/clean-unpacked.js",
     "dist:portable": "npm run icon && npm run build && electron-builder --win portable",
     "test:adblock": "electron electron/test-adblock.js",
+    "test:filters": "electron electron/test-filters.js",
+    "test:db": "electron electron/test-db.js",
     "test:extensions": "electron electron/test-extensions.js",
     "test:newtab": "electron electron/test-newtab.js",
     "test:nixer": "electron electron/test-nixer.js",
@@ -38,6 +40,8 @@
     "test:error": "electron electron/test-error.js",
     "test:focus": "electron electron/test-focus.js",
     "test:cdp": "electron electron/test-cdp.js",
+    "test:hint": "electron electron/test-hint.js",
+    "test:nixer-private": "electron electron/test-nixer-private.js",
     "test:close": "electron electron/test-close.js",
     "test:ui": "electron electron/test-ui.js",
     "test:smoke": "npm run build && cross-env SMOKE=1 electron ."

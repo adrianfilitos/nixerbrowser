@@ -6,6 +6,8 @@ const { broadcastDownloads } = require('./util')
 const { installExtensionFromStore } = require('./extensions')
 
 const pendingSaveUrls = new Map()
+const activeItems = new Map()
+let dlSeq = 1
 
 function initDownloads() {
   session.defaultSession.on('will-download', (_e, item) => {
@@ -31,14 +33,15 @@ function initDownloads() {
       if (res && res.filePath) item.setSavePath(res.filePath)
     }
     const rec = {
-      id: item.getURL(),
+      id: Date.now() + '-' + (dlSeq++),
       name: item.getFilename(),
-      url: item.getURL(),
+      url,
       path: item.getSavePath(),
       received: 0,
       total: item.getTotalBytes(),
       state: 'in-progress',
     }
+    activeItems.set(rec.id, item)
     store.upsertDownload(rec)
     broadcastDownloads()
     item.on('updated', () => {
@@ -47,6 +50,7 @@ function initDownloads() {
       broadcastDownloads()
     })
     item.on('done', (_e2, state) => {
+      activeItems.delete(rec.id)
       rec.state = state === 'completed' ? 'completed' : 'cancelled'
       rec.path = item.getSavePath()
       broadcastDownloads()
@@ -63,6 +67,13 @@ function initDownloads() {
       }
     })
   })
+}
+
+function cancelDownload(id) {
+  const item = activeItems.get(id)
+  if (!item) return false
+  try { item.cancel() } catch {}
+  return true
 }
 
 async function savePageOf(wc) {
@@ -91,4 +102,4 @@ async function saveAsUrl(win, url) {
   session.defaultSession.downloadURL(url)
 }
 
-module.exports = { initDownloads, savePageOf, saveAsUrl }
+module.exports = { initDownloads, savePageOf, saveAsUrl, cancelDownload }

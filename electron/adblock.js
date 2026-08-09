@@ -1,10 +1,13 @@
 const { app, net } = require('electron')
 const fs = require('fs')
 const path = require('path')
+const filters = require('./filters')
 
 const BLOCKLIST_URL = 'https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts'
 const YOYO_URL = 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&mimetype=plaintext'
 const OPENPHISH_URL = 'https://openphish.com/feed.txt'
+const EASYLIST_URL = 'https://easylist.to/easylist/easylist.txt'
+const EASYPRIVACY_URL = 'https://easylist.to/easylist/easyprivacy.txt'
 
 // Patrones de anuncios / ad-tech (se aplican a subrecursos, no a la página principal)
 const AD_PATTERNS = [
@@ -108,6 +111,7 @@ function ensureLoaded() {
   if (loaded) return
   loaded = true
   loadCache()
+  loadFiltersCache()
   addList(EMBEDDED)
 }
 
@@ -171,19 +175,45 @@ function fetchUrlHosts(url) {
   })
 }
 
+function filtersCacheFile() {
+  return path.join(app.getPath('userData'), 'filters-cache.json')
+}
+
+function loadFiltersCache() {
+  try {
+    const data = JSON.parse(fs.readFileSync(filtersCacheFile(), 'utf8'))
+    if (data && data.text) {
+      filters.parseList(data.text)
+      filters.activate()
+    }
+  } catch {}
+}
+
+function saveFiltersCache(text) {
+  try {
+    fs.writeFileSync(filtersCacheFile(), JSON.stringify({ ts: Date.now(), text }))
+  } catch {}
+}
+
 function refresh() {
   Promise.all([
     fetchHosts(BLOCKLIST_URL),
     fetchHosts(YOYO_URL).catch(() => []),
     fetchUrlHosts(OPENPHISH_URL).catch(() => []),
+    net.fetch(EASYLIST_URL, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : '')).catch(() => ''),
+    net.fetch(EASYPRIVACY_URL, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : '')).catch(() => ''),
   ])
-    .then(([a, b, c]) => {
+    .then(([a, b, c, easy, priv]) => {
       const list = [...a, ...b, ...c]
       domains = new Set()
       suffixes = new Set()
       addList(list)
       addList(EMBEDDED)
       saveCache(list)
+      const text = easy + '\n' + priv
+      filters.parseList(text)
+      filters.activate()
+      saveFiltersCache(text)
     })
     .catch(() => {})
 }
@@ -230,6 +260,14 @@ function bump(origin, type) {
   blockedCounts.set(origin, c)
 }
 
+function pageHostOf(initiator) {
+  try {
+    return initiator ? new URL(initiator).hostname.toLowerCase() : ''
+  } catch {
+    return ''
+  }
+}
+
 function init(sessionRef, getState) {
   ensureLoaded()
   sessionRef.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
@@ -242,6 +280,18 @@ function init(sessionRef, getState) {
       const host = url.hostname.toLowerCase()
       const origin = originOf(details.url)
       const type = details.resourceType || 'other'
+      const pageHost = pageHostOf(details.initiator)
+
+      if (st.blockAds) {
+        // 0) Filtros EasyList/EasyPrivacy (reglas de red con excepciones)
+        const fm = filters.matches(details.url, type, pageHost)
+        if (fm) {
+          console.log('DBG_FILTER_BLOCK', details.url, type, pageHost)
+          bump(origin, type === 'script' ? 'scripts' : 'ads')
+          logBlock(details.url, 'filtro')
+          return callback({ cancel: true })
+        }
+      }
 
       // 1) Host en la lista (bloquea TODO, incluida la página principal)
       if (st.blockAds && isBlocked(host)) {
@@ -319,6 +369,7 @@ function stats() {
   }
   return {
     count: domains.size,
+    filters: filters.stats(),
     updated: cache.ts,
     total: totalBlocked,
     ads,
@@ -328,8 +379,18 @@ function stats() {
   }
 }
 
+function cosmeticCss(host) {
+  try {
+    const sels = filters.cosmeticFor(host)
+    if (!sels.length) return ''
+    return sels.map((s) => s + '{display:none !important}').join('\n')
+  } catch {
+    return ''
+  }
+}
+
 function recentLog() {
   return recent.slice()
 }
 
-module.exports = { init, refresh, stats, recentLog }
+module.exports = { init, refresh, stats, recentLog, cosmeticCss }

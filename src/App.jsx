@@ -212,6 +212,7 @@ export default function App() {
         return
       }
       update({ url: internal ? '' : url, internal, error: null })
+      failedUrlRef.current.delete(id)
       if (!internal && url.startsWith('http') && !isLoopback(url) && !incognitoRef.current) {
         const t = tabsRef.current.find((x) => x.id === id)
         window.api.addHistory({ url, title: (t && t.title) || url })
@@ -268,30 +269,33 @@ export default function App() {
     })
   }
 
-  function addTab(url, opts = {}) {
-    const src = opts.src || computeSrc(url)
-    const id = Date.now() + '-' + tabSeq++
-    const tab = {
-      id,
-      url: url || '',
-      src,
-      title: opts.title || (url ? '' : (internalForSrc(src) === 'welcome' ? 'Bienvenida' : 'Nueva pestaña')),
+  function newTabRecord({ url = '', src, internal, title, pinned = false, group = null, active = false } = {}) {
+    const finalSrc = src || computeSrc(url)
+    return {
+      id: Date.now() + '-' + tabSeq++,
+      url,
+      src: finalSrc,
+      title: title || (url ? '' : (internalForSrc(finalSrc) === 'welcome' ? 'Bienvenida' : 'Nueva pestaña')),
       favicon: null,
-      pinned: !!opts.pinned,
-      internal: opts.internal || internalForSrc(src),
+      pinned,
+      internal: internal || internalForSrc(finalSrc),
       wcId: null,
-      active: false,
-      group: opts.group || null,
+      active,
+      group,
       audible: false,
       muted: false,
     }
+  }
+
+  function addTab(url, opts = {}) {
+    const tab = newTabRecord({ url, src: opts.src, internal: opts.internal, title: opts.title, pinned: opts.pinned, group: opts.group })
     setTabs((prev) => prev.map((t) => ({ ...t, active: false })).concat(tab))
     if (opts.activate !== false) {
-      requestAnimationFrame(() => activate(id))
+      requestAnimationFrame(() => activate(tab.id))
       if (!url) setFocusSignal((s) => s + 1)
     }
     scheduleSessionSave()
-    return id
+    return tab.id
   }
 
   function activate(id) {
@@ -316,6 +320,7 @@ export default function App() {
     if (t.url && t.url.startsWith('http')) closedTabsRef.current.unshift({ url: t.url, title: t.title })
     if (closedTabsRef.current.length > 50) closedTabsRef.current.length = 50
     setClosedCount(closedTabsRef.current.length)
+    failedUrlRef.current.delete(id)
     setTabs((prev) => {
       const next = prev.filter((x) => x.id !== id)
       if (next.length === 0) {
@@ -410,13 +415,6 @@ export default function App() {
     closeTab(id)
   }
 
-  function detachTab(id) {
-    const t = tabs.find((x) => x.id === id)
-    if (!t || !t.url) return
-    window.api.createWindow(false, t.url)
-    closeTab(id)
-  }
-
   function openInNewWindow(url) {
     if (url) window.api.createWindow(false, url)
   }
@@ -463,7 +461,6 @@ export default function App() {
   function bookmarkAllTabs() {
     let n = 0
     tabs.forEach((t) => {
-      if (t.url && t.url.startsWith('http') && !window.api.isBookmarked) return
       if (t.url && t.url.startsWith('http')) {
         window.api.addBookmark({ url: t.url, title: t.title || t.url })
         n++
@@ -474,22 +471,7 @@ export default function App() {
   }
 
   function createTabObject() {
-    const src = computeSrc('')
-    const id = Date.now() + '-' + tabSeq++
-    return {
-      id,
-      url: '',
-      src,
-      title: internalForSrc(src) === 'welcome' ? 'Bienvenida' : 'Nueva pestaña',
-      favicon: null,
-      pinned: false,
-      internal: internalForSrc(src),
-      wcId: null,
-      active: true,
-      group: null,
-      audible: false,
-      muted: false,
-    }
+    return newTabRecord({ active: true })
   }
 
   function cycleTab(delta) {
@@ -890,7 +872,7 @@ export default function App() {
           onRename={renameTab}
           onMove={moveTab}
           onCloseLeft={closeTabsLeft}
-          onDetach={detachTab}
+          onDetach={moveTabToWindow}
           windowId={windowIdRef.current}
           onPin={(id) => setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t)))}
           onNewUrl={(url) => addTab(url)}
@@ -973,10 +955,12 @@ export default function App() {
               if (el) {
                 elsRef.current.set(t.id, el)
                 attach(el, t.id)
+              } else {
+                elsRef.current.delete(t.id)
               }
             }}
             src={t.src}
-            partition={incognitoRef.current ? 'navegador-incognito' : undefined}
+            partition={incognitoRef.current ? (viewInfoRef.current.privatePartition || 'navegador-incognito') : undefined}
             preload={viewInfoRef.current.preload || undefined}
             className={'page-view' + (t.active ? ' active' : '') + (splitWith === t.id ? ' split-on' : '')}
           />

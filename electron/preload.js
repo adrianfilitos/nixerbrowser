@@ -25,7 +25,6 @@ contextBridge.exposeInMainWorld('api', {
   getUrlOverrides: () => ipcRenderer.invoke('get-url-overrides'),
   savePage: () => ipcRenderer.invoke('save-page'),
   print: () => ipcRenderer.invoke('print-wc'),
-  saveAs: (url) => ipcRenderer.invoke('save-as', url),
   readerMode: () => ipcRenderer.invoke('reader-mode'),
   taskManagerList: () => ipcRenderer.invoke('taskmanager:list'),
 
@@ -61,8 +60,6 @@ contextBridge.exposeInMainWorld('api', {
   createWindow: (incognito, url) => ipcRenderer.send('create-window', incognito, url),
   openNewTab: (url) => ipcRenderer.send('create-tab', url),
 
-  onTabs: (cb) => {}, // tabs are local to the renderer now
-  onNavigation: (cb) => {},
   onSettings: (cb) => {
     const l = (_e, d) => cb(d)
     ipcRenderer.on('settings-updated', l)

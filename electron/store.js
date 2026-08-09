@@ -1,6 +1,7 @@
 const { app, safeStorage } = require('electron')
 const fs = require('fs')
 const path = require('path')
+const dbmod = require('./db')
 
 const BUILTIN_ENGINES = [
   { id: 'google', name: 'Google', tpl: 'https://www.google.com/search?q={q}' },
@@ -91,7 +92,6 @@ const DEFAULT_SETTINGS = {
 const DEFAULTS = {
   bookmarks: [],
   history: [],
-  closedTabs: [],
   downloads: [],
   session: [],
   passwords: [],
@@ -102,32 +102,189 @@ const DEFAULTS = {
   workspaces: [],
 }
 
-let state = loadAll()
+let state
 
 function file(name) {
   return path.join(app.getPath('userData'), name)
 }
 
-function load(name, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(file(name), 'utf8'))
-  } catch {
-    return JSON.parse(JSON.stringify(fallback))
+// ---- Cifrado en reposo ----------------------------------------------------
+// safeStorage cifra con la clave del SO (Keychain/DPAPI) y solo está disponible
+// después de app.ready. Por eso los valores sensibles viven CIFRADOS en memoria
+// (patrón ya usado por passwords/aiApiKey) y se descifran de forma perezosa en
+// el punto de acceso; al escribir a disco se mantienen cifrados.
+
+const ENC_SETTINGS = ['aiApiKey', 'autofillProfile']
+
+function encJson(v) {
+  return encryptSecret(JSON.stringify(v))
+}
+
+function decodeSettingValue(value) {
+  if (value === undefined || value === null) return undefined
+  const t = typeof value
+  if (t === 'string' || t === 'number' || t === 'boolean') return value
+  try { return JSON.parse(value) } catch { return value }
+}
+
+function encodeSetting(name, value) {
+  if (name === 'aiApiKey') {
+    if (typeof value === 'string' && value.startsWith('e1:')) return value
+    return encryptSecret(String(value || ''))
   }
+  if (name === 'autofillProfile') {
+    if (value && typeof value === 'string' && value.startsWith('e1:')) return value
+    return encJson(value || {})
+  }
+  if (value === undefined) return ''
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return JSON.stringify(value)
+}
+
+function decryptProfile(v) {
+  if (v && typeof v === 'string' && v.startsWith('e1:')) {
+    try {
+      const d = JSON.parse(decryptSecret(v))
+      return d && typeof d === 'object' ? d : {}
+    } catch {
+      return {}
+    }
+  }
+  return (v && typeof v === 'object') ? v : {}
+}
+
+// ---- Persistencia SQLite --------------------------------------------------
+
+const COLLECTIONS = {
+  settings: {
+    table: 'settings',
+    columns: ['name', 'value'],
+    to: (s) => Object.entries(s).map(([k, v]) => [k, encodeSetting(k, v)]),
+    from: (rows) => {
+      const out = {}
+      for (const r of rows) {
+        // Los valores cifrados se conservan tal cual en memoria; el descifrado es perezoso.
+        const v = ENC_SETTINGS.includes(r.name) ? r.value : decodeSettingValue(r.value)
+        if (v !== undefined) out[r.name] = v
+      }
+      return out
+    },
+  },
+  history: {
+    table: 'history',
+    columns: ['id', 'url', 'title', 'ts'],
+    to: (arr) => arr.map((h) => [null, h.url || '', h.title || '', h.ts || 0]),
+    from: (rows) => rows.slice().reverse().map((r) => ({ url: r.url, title: r.title })),
+  },
+  bookmarks: {
+    table: 'bookmarks',
+    columns: ['id', 'url', 'title', 'folder', 'ts'],
+    to: (arr) => arr.map((b) => [b.id, b.url, b.title || b.url, b.folder || '', b.ts || 0]),
+    from: (rows) => rows.slice().reverse().map((r) => ({ id: r.id, url: r.url, title: r.title, folder: r.folder, ts: r.ts })),
+  },
+  downloads: {
+    table: 'downloads',
+    columns: ['id', 'name', 'url', 'path', 'received', 'total', 'state'],
+    to: (arr) => arr.map((d) => [d.id, d.name || '', d.url || '', d.path || '', d.received || 0, d.total || 0, d.state || '']),
+    from: (rows) => rows.slice().reverse().map((r) => ({ id: r.id, name: r.name, url: r.url, path: r.path, received: r.received, total: r.total, state: r.state })),
+  },
+  passwords: {
+    table: 'passwords',
+    columns: ['id', 'origin', 'username', 'password', 'ts'],
+    to: (arr) => arr.map((p) => [p.id, p.origin, p.username || '', p.password, p.ts || 0]),
+    from: (rows) => rows.slice().reverse().map((r) => ({ id: r.id, origin: r.origin, username: r.username, password: r.password, ts: r.ts })),
+  },
+  session: {
+    table: 'session',
+    columns: ['ord', 'url', 'pinned', 'grp'],
+    to: (arr) => arr.map((s, i) => [i, s.url || '', s.pinned ? 1 : 0, s.group || '']),
+    from: (rows) => rows.map((r) => ({ url: r.url, pinned: !!r.pinned, group: r.grp || undefined })),
+  },
+  extensions: {
+    table: 'extensions',
+    columns: ['id', 'json'],
+    to: (arr) => arr.map((e) => [e.id, JSON.stringify(e)]),
+    from: (rows) => rows.slice().reverse().map((r) => { try { return JSON.parse(r.json) } catch { return null } }).filter(Boolean),
+  },
+  recentSearches: {
+    table: 'recentsearches',
+    columns: ['q', 'ts'],
+    to: (arr) => arr.map((q) => [q, 0]),
+    from: (rows) => rows.slice().reverse().map((r) => r.q),
+  },
+  readingList: {
+    table: 'readinglist',
+    columns: ['id', 'title', 'url', 'text', 'ts'],
+    to: (arr) => arr.map((r) => [r.id, r.title || '', r.url || '', r.text && typeof r.text === 'string' && !r.text.startsWith('e1:') ? encJson(r.text) : (r.text || ''), r.ts || 0]),
+    from: (rows) => rows.slice().reverse().map((r) => ({ id: r.id, title: r.title, url: r.url, text: r.text, ts: r.ts })),
+  },
+  tabGroups: {
+    table: 'tabgroups',
+    columns: ['name', 'json'],
+    to: (obj) => Object.entries(obj || {}).map(([n, g]) => [n, JSON.stringify(g)]),
+    from: (rows) => {
+      const out = {}
+      for (const r of rows) { try { out[r.name] = JSON.parse(r.json) } catch {} }
+      return out
+    },
+  },
+  workspaces: {
+    table: 'workspaces',
+    columns: ['name', 'json'],
+    to: (arr) => arr.map((w) => [w.name, JSON.stringify({ tabs: w.tabs, ts: w.ts })]),
+    from: (rows) => rows.slice().reverse().map((r) => { try { const d = JSON.parse(r.json); return { name: r.name, tabs: d.tabs || [], ts: d.ts || 0 } } catch { return { name: r.name, tabs: [], ts: 0 } } }),
+  },
 }
 
 function loadAll() {
+  const { created } = dbmod.open(app.getPath('userData'))
   const s = {}
-  for (const k of Object.keys(DEFAULTS)) s[k] = load(k, DEFAULTS[k])
-  s.settings = Object.assign({}, DEFAULT_SETTINGS, load('settings', {}))
+  for (const k of Object.keys(DEFAULTS)) s[k] = loadCollection(k)
+  s.settings = Object.assign({}, DEFAULT_SETTINGS, loadCollection('settings'))
+  if (created) migrateLegacy(s)
   return s
+}
+
+function loadCollection(name) {
+  const cols = COLLECTIONS[name]
+  if (!cols) return JSON.parse(JSON.stringify(DEFAULTS[name]))
+  try {
+    const rows = dbmod.selectAll(cols.table, cols.columns)
+    return cols.from(rows)
+  } catch {
+    return JSON.parse(JSON.stringify(DEFAULTS[name]))
+  }
 }
 
 function persist(name) {
   try {
-    fs.writeFileSync(file(name), JSON.stringify(state[name], null, 2))
+    const cols = COLLECTIONS[name]
+    if (!cols) return
+    const rows = cols.to(state[name])
+    dbmod.clearInsert(cols.table, cols.columns, rows)
   } catch {}
 }
+
+function migrateLegacy(s) {
+  let migrated = false
+  const legacyFiles = ['settings', 'history', 'bookmarks', 'downloads', 'passwords', 'session', 'extensions', 'recentSearches', 'readingList', 'tabGroups', 'workspaces']
+  for (const k of legacyFiles) {
+    let v
+    try {
+      v = JSON.parse(fs.readFileSync(file(k + '.json'), 'utf8'))
+    } catch {
+      continue
+    }
+    if (k === 'settings') s.settings = Object.assign({}, DEFAULT_SETTINGS, v)
+    else s[k] = v
+    migrated = true
+  }
+  if (migrated) {
+    for (const k of legacyFiles) persist(k)
+  }
+}
+
+state = loadAll()
 
 function addHistory(entry) {
   state.history.unshift(entry)
@@ -202,32 +359,6 @@ function updateBookmark(id, patch) {
 
 function isBookmarked(url) {
   return state.bookmarks.some((b) => b.url === url)
-}
-
-function toggleBookmark(url, title) {
-  const existing = state.bookmarks.find((b) => b.url === url)
-  if (existing) {
-    removeBookmark(existing.id)
-    return false
-  }
-  addBookmark({ url, title })
-  return true
-}
-
-function closedTabs() {
-  return state.closedTabs
-}
-
-function pushClosed(tab) {
-  state.closedTabs.unshift({ url: tab.url, title: tab.title, ts: Date.now() })
-  if (state.closedTabs.length > 50) state.closedTabs.length = 50
-  persist('closedTabs')
-}
-
-function popClosed() {
-  const t = state.closedTabs.shift()
-  persist('closedTabs')
-  return t || null
 }
 
 function settings() {
@@ -412,7 +543,13 @@ function recentSearches(limit) {
 }
 
 function listReadingList() {
-  return state.readingList
+  return state.readingList.map((r) => {
+    let text = r.text || ''
+    if (typeof text === 'string' && text.startsWith('e1:')) {
+      try { text = JSON.parse(decryptSecret(text)) } catch {}
+    }
+    return { ...r, text }
+  })
 }
 
 function addReadingItem(item) {
@@ -441,10 +578,6 @@ module.exports = {
   updateBookmark,
   reorderBookmarks,
   isBookmarked,
-  toggleBookmark,
-  closedTabs,
-  pushClosed,
-  popClosed,
   settings,
   settingsDefaults: () => JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
   setSettings,
@@ -475,6 +608,7 @@ module.exports = {
   getPassword,
   encryptSecret,
   decryptSecret,
+  decryptProfile,
   listExtensions,
   addExtension,
   removeExtension,

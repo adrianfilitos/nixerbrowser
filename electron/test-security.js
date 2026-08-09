@@ -12,20 +12,29 @@ const store = require('./store')
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
+function dbRaw() {
+  const base = process.env.NIXER_USER_DATA
+  let raw = ''
+  for (const f of ['nixer.db', 'nixer.db-wal']) {
+    try { raw += fs.readFileSync(path.join(base, f), 'utf8') } catch {}
+  }
+  return raw
+}
+
 app.whenReady().then(async () => {
   const results = {}
 
   // 1) Passwords cifradas en reposo
   const PASS = 'clave-super-secreta-123'
   store.addPassword({ origin: 'https://example.com', username: 'pepe', password: PASS })
-  const pwRaw = fs.readFileSync(path.join(process.env.NIXER_USER_DATA, 'passwords'), 'utf8')
+  const pwRaw = dbRaw()
   results.passwordEncryptedAtRest = !pwRaw.includes(PASS)
   results.passwordDecrypts = store.getPassword('https://example.com').password === PASS
 
   // 2) Clave de IA cifrada en reposo
   const AIKEY = 'sk-ia-secreta-999'
   store.setSettings({ aiApiKey: store.encryptSecret(AIKEY) })
-  const stRaw = fs.readFileSync(path.join(process.env.NIXER_USER_DATA, 'settings'), 'utf8')
+  const stRaw = dbRaw()
   results.aiKeyEncryptedAtRest = !stRaw.includes(AIKEY)
   results.aiKeyDecrypts = store.decryptSecret(store.settings().aiApiKey) === AIKEY
 
