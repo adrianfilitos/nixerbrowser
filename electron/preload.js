@@ -10,6 +10,10 @@ try {
 contextBridge.exposeInMainWorld('api', {
   viewInfo: () => ipcRenderer.invoke('view-info'),
   windowInfo: () => ipcRenderer.invoke('window-info'),
+  dragStart: (info) => ipcRenderer.send('drag-start', info),
+  dragEnd: () => ipcRenderer.send('drag-end'),
+  getDragState: () => ipcRenderer.invoke('get-drag-state'),
+  dockDragged: () => ipcRenderer.invoke('dock-dragged'),
   setActiveWc: (wcId) => ipcRenderer.send('set-active-wc', wcId),
   addHistory: (entry) => ipcRenderer.send('add-history', entry),
   updateHistoryTitle: (url, title) => ipcRenderer.send('history:update-title', url, title),

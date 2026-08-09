@@ -3,13 +3,15 @@ import ContextMenu from './ContextMenu.jsx'
 import WindowControls from './WindowControls.jsx'
 import { I } from './icons.jsx'
 
-export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore, onGroup, splitWith, onSplit, onMute, onMoveWindow, onNewWindowUrl, closedCount, onRestoreAll, onReloadAll, onNavigateTab, onRename, onMove, onCloseLeft }) {
+export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, onPin, onReorder, onOverlayChange = () => {}, maximized, onNewUrl, onRestore, onGroup, splitWith, onSplit, onMute, onMoveWindow, onNewWindowUrl, closedCount, onRestoreAll, onReloadAll, onNavigateTab, onRename, onMove, onCloseLeft, onDetach, windowId }) {
   const [menu, setMenu] = useState(null)
   const [manageOpen, setManageOpen] = useState(false)
   const [renamingId, setRenamingId] = useState(null)
   const [renameVal, setRenameVal] = useState('')
   const [filter, setFilter] = useState('')
-  let dragId = null
+  const [dockTarget, setDockTarget] = useState(false)
+  const dragTabRef = useRef(null)
+  const dragMovedRef = useRef(false)
   const colorSeq = useRef(0)
   const GROUP_COLORS = ['#e05252', '#d99a2b', '#3da26e', '#4a7bd0', '#8b5cf6', '#c4458c']
 
@@ -45,28 +47,60 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
     setManageOpen(false)
   }
 
-  function startDrag(e, id) {
-    if (e.button !== 0) return
-    dragId = id
-    e.currentTarget.classList.add('dragging')
+  function dragGhost(title) {
+    const c = document.createElement('canvas')
+    c.width = 130
+    c.height = 34
+    const ctx = c.getContext('2d')
+    ctx.fillStyle = '#232329'
+    ctx.beginPath()
+    ctx.roundRect(0, 0, 130, 34, 9)
+    ctx.fill()
+    ctx.fillStyle = '#e9e9ee'
+    ctx.font = '12px system-ui'
+    ctx.fillText((title || 'Pestaña').slice(0, 20), 12, 21)
+    return c
   }
 
-  function handleMove(e) {
-    if (!dragId) return
-    const el = document.elementFromPoint(e.clientX, e.clientY)
-    const target = el ? el.closest('.tab') : null
-    if (!target) return
-    const targetId = target.dataset.id
-    if (String(targetId) === String(dragId)) return
-    onReorder(dragId, targetId)
+  function onDragStart(e, t) {
+    dragTabRef.current = t
+    dragMovedRef.current = false
+    if (window.api.dragStart) window.api.dragStart({ tabId: t.id, url: t.url, title: t.title })
+    try { e.dataTransfer.setData('text/plain', t.url || '') } catch {}
+    try { e.dataTransfer.setDragImage(dragGhost(t.title), 20, 12) } catch {}
   }
 
-  function endDrag(e) {
-    if (dragId) {
-      const el = e.currentTarget.querySelector('.dragging')
-      if (el) el.classList.remove('dragging')
-    }
-    dragId = null
+  function onDragEnd(e, t) {
+    if (window.api.dragEnd) window.api.dragEnd()
+    if (dragMovedRef.current) { dragTabRef.current = null; return }
+    // si se suelta fuera de la ventana → nueva ventana
+    const m = 12
+    const outside =
+      e.screenX < window.screenX - m || e.screenX > window.screenX + window.outerWidth + m ||
+      e.screenY < window.screenY - m || e.screenY > window.screenY + window.outerHeight + m
+    dragTabRef.current = null
+    if (outside && onDetach) onDetach(t.id)
+  }
+
+  function onTabDragOver(e, t) {
+    e.preventDefault()
+    if (!dragTabRef.current || dragTabRef.current.id === t.id) return
+    dragMovedRef.current = true
+    onReorder(dragTabRef.current.id, t.id)
+  }
+
+  function onListDragOver(e) {
+    e.preventDefault()
+    if (!window.api.getDragState) return
+    window.api.getDragState().then((st) => {
+      if (st && st.winId !== windowId && windowId) setDockTarget(true)
+    }).catch(() => {})
+  }
+
+  function onListDrop(e) {
+    e.preventDefault()
+    setDockTarget(false)
+    if (window.api.dockDragged) window.api.dockDragged()
   }
 
   function openMenu(e, tab) {
@@ -115,20 +149,22 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
     : []
 
   return (
-    <div className="tab-strip" onMouseMove={handleMove} onMouseUp={endDrag} onDoubleClick={(e) => { if (!e.target.closest('.tab')) onNew() }}>
-      <div className="tab-list">
+    <div className="tab-strip" onDoubleClick={(e) => { if (!e.target.closest('.tab')) onNew() }}>
+      <div className={'tab-list' + (dockTarget ? ' dock-target' : '')} onDragOver={onListDragOver} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDockTarget(false) }} onDrop={onListDrop}>
         {tabs.map((t) => (
           <div
             key={t.id}
             data-id={t.id}
             className={'tab' + (t.active ? ' active' : '') + (t.pinned ? ' pinned' : '')}
+            draggable
+            onDragStart={(e) => onDragStart(e, t)}
+            onDragEnd={(e) => onDragEnd(e, t)}
+            onDragOver={(e) => onTabDragOver(e, t)}
             onClick={() => onSelect(t.id)}
             onMouseDown={(e) => {
               if (e.button === 1) {
                 e.preventDefault()
                 onClose(t.id)
-              } else {
-                startDrag(e, t.id)
               }
             }}
             onContextMenu={(e) => openMenu(e, t)}
@@ -139,9 +175,9 @@ export default function TabStrip({ tabs, onNew, onSelect, onClose, onCloseAll, o
                 else if (e.key === 'Escape') setRenamingId(null)
               }
             }}
-            onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault()
+              if (dragTabRef.current) return
               const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')
               if (url && /^https?:/.test(url.trim()) && onNavigateTab) onNavigateTab(t.id, url.trim())
             }}

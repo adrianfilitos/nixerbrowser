@@ -92,6 +92,7 @@ export default function App() {
   const [presentation, setPresentation] = useState(false)
   const [tabSearchOpen, setTabSearchOpen] = useState(false)
   const [tabSearchQuery, setTabSearchQuery] = useState('')
+  const windowIdRef = useRef(0)
 
   function toggleSidebar(tab) {
     setSidebar((cur) => (cur === tab ? null : (tab || 'bookmarks')))
@@ -379,6 +380,13 @@ export default function App() {
     closeTab(id)
   }
 
+  function detachTab(id) {
+    const t = tabs.find((x) => x.id === id)
+    if (!t || !t.url) return
+    window.api.createWindow(false, t.url)
+    closeTab(id)
+  }
+
   function openInNewWindow(url) {
     if (url) window.api.createWindow(false, url)
   }
@@ -532,6 +540,7 @@ export default function App() {
         setSettings(s)
         incognitoRef.current = !!w.incognito
         setIncognito(!!w.incognito)
+        windowIdRef.current = w.id || 0
         setReady(true)
         window.api.getBookmarks().then(setBookmarks)
         window.api.getUrlOverrides().then(setUrlOverrides)
@@ -618,6 +627,9 @@ export default function App() {
         else if (action === 'move-tab') {
           const t = activeTab
           if (t) moveTab(t.id, Number(data))
+        }
+        else if (action === 'close-tab-by-id') {
+          closeTab(Number(data))
         }
         else if (action === 'translate-page') {
           const t = tabsRef.current.find((x) => x.active)
@@ -834,6 +846,8 @@ export default function App() {
           onRename={renameTab}
           onMove={moveTab}
           onCloseLeft={closeTabsLeft}
+          onDetach={detachTab}
+          windowId={windowIdRef.current}
           onPin={(id) => setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t)))}
           onNewUrl={(url) => addTab(url)}
           onRestore={() => restoreTab()}

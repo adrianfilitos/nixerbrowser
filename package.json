@@ -30,6 +30,7 @@
     "test:features2": "electron electron/test-features2.js",
     "test:big": "electron electron/test-big.js",
     "test:translate": "electron electron/test-translate.js",
+    "test:dock": "electron electron/test-dock.js",
     "test:close": "electron electron/test-close.js",
     "test:ui": "electron electron/test-ui.js",
     "test:smoke": "npm run build && cross-env SMOKE=1 electron ."

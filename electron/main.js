@@ -34,6 +34,8 @@ const sqlite = require('./sqlite')
 const translate = require('./translate')
 const { autoUpdater } = require('electron-updater')
 
+let dragState = null
+
 if (store.settings().hardwareAcceleration === false) {
   app.disableHardwareAcceleration()
 }
@@ -150,7 +152,22 @@ function registerIpc() {
   })
   ipcMain.handle('window-info', (e) => {
     const c = ctx.ctxFor(e)
-    return c ? { incognito: c.incognito } : { incognito: false }
+    return c ? { incognito: c.incognito, id: c.id } : { incognito: false, id: 0 }
+  })
+  ipcMain.on('drag-start', (e, info) => {
+    const c = ctx.ctxFor(e)
+    if (c && info) dragState = { ...info, win: c.win, winId: c.id }
+  })
+  ipcMain.on('drag-end', () => { dragState = null })
+  ipcMain.handle('get-drag-state', () => dragState ? { id: dragState.id, winId: dragState.winId } : null)
+  ipcMain.handle('dock-dragged', (e) => {
+    const target = ctx.ctxFor(e)
+    if (!target || !dragState || dragState.winId === target.id) return false
+    if (dragState.url) ctx.sendUi(target, 'open-tab-bg', dragState.url)
+    const sourceCtx = dragState.win ? ctx.windows.get(dragState.win) : null
+    if (sourceCtx && dragState.tabId) ctx.sendUi(sourceCtx, 'close-tab-by-id', dragState.tabId)
+    dragState = null
+    return true
   })
   ipcMain.on('set-active-wc', (e, wcId) => {
     const c = ctx.ctxFor(e)
