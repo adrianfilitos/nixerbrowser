@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Nueva pestaña</title>
+    <style>
+      :root { --bg:#141414; --text:#e8e8e8; --faint:#6a6a6a; --dim:#9a9a9a; --accent:#4a6cf7; }
+      :root.light { --bg:#f4f4f4; --text:#1a1a1a; --faint:#777; --dim:#555; --accent:#3a5be0; }
+      * { box-sizing:border-box; margin:0; padding:0; }
+      body { min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg); color:var(--text); font-family:system-ui,"Segoe UI",sans-serif; }
+      body.aurora { background:linear-gradient(160deg,#0f2027,#203a43 45%,#2c5364); }
+      body.sunset { background:linear-gradient(160deg,#2b1e0e,#6b3a2a 55%,#2b1e0e); }
+      body.ocean { background:linear-gradient(160deg,#061a3a,#0a2d5c 55%,#061a3a); }
+      body.midnight { background:linear-gradient(160deg,#0b0b14,#16162b 55%,#0b0b14); }
+      .box { width:680px; text-align:center; padding:20px; }
+      .clock { font-size:58px; font-weight:200; letter-spacing:1px; margin-bottom:4px; }
+      .greet { font-size:16px; color:var(--dim); margin-bottom:2px; }
+      .date { color:var(--faint); margin-bottom:34px; font-size:14px; }
+      .top.hidden, .links.hidden, .recent.hidden, .search.hidden { display:none; }
+      input {
+        width:100%; padding:15px 22px; font-size:16px; border-radius:28px;
+        border:1px solid #333; background:#1d1d1d; color:#fff; outline:none;
+        box-shadow:0 6px 24px rgba(0,0,0,.35);
+      }
+      :root.light input { background:#fff; color:#1a1a1a; border-color:#ccc; box-shadow:0 6px 24px rgba(0,0,0,.08); }
+      input:focus { border-color:var(--accent); }
+      .links { margin-top:26px; display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+      .link {
+        display:flex; align-items:center; gap:10px; padding:10px 16px; border-radius:12px;
+        background:#1d1d1d; border:1px solid #2a2a2a; color:var(--text); text-decoration:none; font-size:13px;
+        transition:transform .1s ease, background .1s ease;
+      }
+      :root.light .link { background:#fff; border-color:#ddd; }
+      .link:hover { background:#262626; transform:translateY(-2px); }
+      :root.light .link:hover { background:#f0f0f0; }
+      .link .dot { width:9px; height:9px; border-radius:50%; }
+      .recent { margin-top:30px; text-align:left; }
+      .recent h3 { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--faint); margin-bottom:12px; }
+      .recent-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+      .recent-card {
+        display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:12px;
+        background:#1d1d1d; border:1px solid #2a2a2a; color:var(--text); text-decoration:none;
+        min-width:0; transition:transform .1s ease, background .1s ease;
+      }
+      :root.light .recent-card { background:#fff; border-color:#ddd; }
+      .recent-card:hover { background:#262626; transform:translateY(-2px); }
+      :root.light .recent-card:hover { background:#f0f0f0; }
+      .recent-card .rc-fav { width:32px; height:32px; flex-shrink:0; border-radius:8px; background:var(--bg3,#262626); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; overflow:hidden; }
+      .recent-card .rc-fav img { width:100%; height:100%; }
+      .recent-card .rc-info { min-width:0; flex:1; }
+      .recent-card .rc-title { font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .recent-card .rc-host { font-size:11px; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+      .pencil {
+        position:fixed; top:14px; right:16px; width:36px; height:36px; border-radius:10px;
+        border:1px solid #2a2a2a; background:rgba(29,29,29,.7); color:var(--dim); cursor:pointer;
+        display:flex; align-items:center; justify-content:center; opacity:.55; transition:opacity .12s, background .12s, color .12s;
+      }
+      :root.light .pencil { background:rgba(255,255,255,.85); border-color:#ddd; }
+      .pencil:hover { opacity:1; background:#262626; color:var(--text); }
+      :root.light .pencil:hover { background:#ececf2; color:#1a1a1a; }
+      @media (max-width:640px) { .recent-grid { grid-template-columns:1fr; } }
+    </style>
+  </head>
+  <body>
+    <button class="pencil" id="pencil" title="Personalizar página de inicio">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+      </svg>
+    </button>
+    <div class="box">
+      <div class="top">
+        <div class="greet" id="greet"></div>
+        <div class="clock"></div>
+        <div class="date"></div>
+      </div>
+      <input id="q" class="search" type="text" placeholder="Buscar o escribir una dirección" autofocus />
+      <div class="links" id="links"></div>
+      <div class="recent" id="recentBlock">
+        <h3>Visitados recientemente</h3>
+        <div class="recent-grid" id="recent"></div>
+      </div>
+    </div>
+    <script>
+      function tick() {
+        var d = new Date()
+        document.querySelector('.clock').textContent =
+          d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+        document.querySelector('.date').textContent =
+          d.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })
+      }
+      tick()
+      setInterval(tick, 1000)
+
+      document.getElementById('pencil').onclick = function () { location.href = 'nixer://settings#s-newtab' }
+
+      document.getElementById('q').addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return
+        var v = e.target.value.trim()
+        if (!v) return
+        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(v)) { location.href = v; return }
+        if (/^localhost(:\d+)?(\/.*)?$/.test(v)) { location.href = 'http://' + v; return }
+        if (/^[\w-]+(\.[\w-]+)+([/:?#].*)?$/.test(v)) { location.href = 'https://' + v; return }
+        browserAPI.search.url(v).then(function (u) { location.href = u })
+      })
+
+      function renderLinks(list) {
+        var box = document.getElementById('links')
+        box.innerHTML = ''
+        if (!list || !list.length) { box.classList.add('hidden'); return }
+        box.classList.remove('hidden')
+        list.forEach(function (sc) {
+          if (!sc || !sc.url) return
+          var a = document.createElement('a')
+          a.className = 'link'
+          a.href = sc.url
+          var dot = document.createElement('span')
+          dot.className = 'dot'
+          dot.style.background = sc.color || '#6c7bff'
+          a.appendChild(dot)
+          a.appendChild(document.createTextNode(sc.title || sc.url))
+          a.addEventListener('click', function (e) { e.preventDefault(); location.href = sc.url })
+          box.appendChild(a)
+        })
+      }
+
+      function hostOf(url) {
+        try { return new URL(url).hostname } catch { return '' }
+      }
+
+      function renderRecent(items) {
+        var block = document.getElementById('recentBlock')
+        var grid = document.getElementById('recent')
+        grid.innerHTML = ''
+        if (!items || !items.length) { block.classList.add('hidden'); return }
+        block.classList.remove('hidden')
+        items.slice(0, 9).forEach(function (h) {
+          var host = hostOf(h.url)
+          var a = document.createElement('a')
+          a.className = 'recent-card'
+          a.href = h.url
+          var fav = document.createElement('span')
+          fav.className = 'rc-fav'
+          var img = document.createElement('img')
+          img.src = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=64'
+          img.alt = ''
+          img.onerror = function () { fav.textContent = (h.title || host).charAt(0).toUpperCase() }
+          fav.appendChild(img)
+          var info = document.createElement('span')
+          info.className = 'rc-info'
+          var t = document.createElement('span')
+          t.className = 'rc-title'
+          t.textContent = h.title && h.title !== h.url ? h.title : host
+          var ho = document.createElement('span')
+          ho.className = 'rc-host'
+          ho.textContent = host
+          info.appendChild(t)
+          info.appendChild(ho)
+          a.appendChild(fav)
+          a.appendChild(info)
+          a.addEventListener('click', function (e) { e.preventDefault(); location.href = h.url })
+          grid.appendChild(a)
+        })
+      }
+
+      browserAPI.history.list('').then(renderRecent)
+
+      browserAPI.settings.get().then(function (s) {
+        if (s.newtabWallpaper && s.newtabWallpaper !== 'none') document.body.classList.add(s.newtabWallpaper)
+        var light = s.theme === 'light' || (s.theme === 'system' && matchMedia('(prefers-color-scheme: light)').matches)
+        document.documentElement.classList.toggle('light', light)
+
+        if (s.greeting) document.getElementById('greet').textContent = s.greeting
+        else if (s.profileName) document.getElementById('greet').textContent = 'Hola, ' + s.profileName
+
+        if (s.showClock === false) document.querySelector('.top').classList.add('hidden')
+        if (s.showSearch === false) document.getElementById('q').classList.add('hidden')
+        if (s.showRecent === false) document.getElementById('recentBlock').classList.add('hidden')
+
+        renderLinks(s.shortcuts)
+      })
+    </script>
+  </body>
+</html>

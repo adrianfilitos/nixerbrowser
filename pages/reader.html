@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Modo lectura</title>
+    <style>
+      :root { --bg:#f6f4ef; --text:#23201c; --dim:#6a655c; --accent:#4a5ae0; }
+      :root.dark { --bg:#17171b; --text:#e4e2da; --dim:#8a8678; --accent:#6c7bff; }
+      * { box-sizing:border-box; margin:0; padding:0; }
+      body { font-family:Georgia,"Times New Roman",serif; background:var(--bg); color:var(--text); }
+      .wrap { max-width:720px; margin:0 auto; padding:48px 24px 80px; }
+      h1 { font-size:34px; line-height:1.25; margin-bottom:10px; font-weight:700; }
+      .meta { color:var(--dim); font-size:14px; margin-bottom:36px; display:flex; align-items:center; gap:10px; }
+      .meta a { color:var(--accent); text-decoration:none; }
+      article { font-size:19px; line-height:1.75; }
+      article p { margin-bottom:20px; }
+      .bar { position:fixed; top:0; left:0; right:0; height:44px; background:var(--bg); border-bottom:1px solid rgba(0,0,0,.08); display:flex; align-items:center; gap:8px; padding:0 16px; }
+      .bar .spacer { flex:1; }
+      .bar a { color:var(--dim); font-size:13px; text-decoration:none; margin-right:12px; }
+      .bar a:hover { color:var(--accent); }
+      .bar button { font-family:system-ui; border:1px solid #333; background:transparent; color:var(--text); padding:6px 14px; border-radius:8px; cursor:pointer; font-size:12px; }
+      .bar button:hover { background:rgba(0,0,0,.06); }
+      body.dark .bar { border-bottom-color:rgba(255,255,255,.08); }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <span style="font-family:system-ui;font-size:14px;font-weight:600">Modo lectura</span>
+      <span class="spacer"></span>
+      <a id="orig" href="#" style="display:none">Abrir original</a>
+      <button id="themeBtn">Tema</button>
+      <button id="backBtn">Cerrar pestaña</button>
+    </div>
+    <div class="wrap">
+      <h1 id="title"></h1>
+      <div class="meta"><span id="site"></span></div>
+      <article id="content"></article>
+    </div>
+    <script>
+      var params = new URLSearchParams(location.search)
+      var id = params.get('id')
+      var dark = false
+      browserAPI.reader.get(id).then(function (data) {
+        if (!data) {
+          document.getElementById('content').textContent = 'No se pudo extraer el contenido.'
+          return
+        }
+        document.title = data.title || 'Modo lectura'
+        document.getElementById('title').textContent = data.title
+        try { document.getElementById('site').textContent = new URL(data.url).hostname } catch (e) {}
+        var orig = document.getElementById('orig')
+        orig.href = data.url
+        orig.style.display = 'inline'
+        orig.addEventListener('click', function (e) { e.preventDefault(); browserAPI.openTab(data.url) })
+        var art = document.getElementById('content')
+        data.text.split('\n\n').forEach(function (p) {
+          p = p.trim()
+          if (p.length > 40) {
+            var el = document.createElement('p')
+            el.textContent = p
+            art.appendChild(el)
+          }
+        })
+        if (!art.children.length) { art.textContent = data.text }
+      })
+      document.getElementById('backBtn').onclick = function () { browserAPI.openTab('') }
+      document.getElementById('themeBtn').onclick = function () {
+        dark = !dark
+        document.documentElement.classList.toggle('dark', dark)
+      }
+    </script>
+  </body>
+</html>

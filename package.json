@@ -1,0 +1,65 @@
+{
+  "name": "navegador",
+  "productName": "Nixer Browser",
+  "version": "0.1.0",
+  "description": "Navegador basado en Chromium con capa UI en React (arquitectura tipo Brave)",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "vite": "vite",
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "icon": "node scripts/generate-icon.js",
+    "dist": "npm run icon && npm run build && electron-builder --win nsis",
+    "postdist": "node scripts/clean-unpacked.js",
+    "dist:portable": "npm run icon && npm run build && electron-builder --win portable",
+    "test:adblock": "electron electron/test-adblock.js",
+    "test:extensions": "electron electron/test-extensions.js",
+    "test:newtab": "electron electron/test-newtab.js",
+    "test:nixer": "electron electron/test-nixer.js",
+    "test:browseraction": "electron electron/test-browseraction.js",
+    "test:close": "electron electron/test-close.js",
+    "test:ui": "electron electron/test-ui.js",
+    "test:smoke": "npm run build && cross-env SMOKE=1 electron ."
+  },
+  "build": {
+    "appId": "com.nixer.browser",
+    "productName": "Nixer Browser",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "pages/**/*",
+      "newtab.html",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.0",
+    "electron-chrome-extensions": "^4.9.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^36.0.0",
+    "electron-builder": "^26.15.3",
+    "vite": "^5.4.8",
+    "wait-on": "^7.2.0"
+  }
+}

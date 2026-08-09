@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Extensiones</title>
+    <style>
+      :root { --bg:#151518; --bg2:#1c1c20; --bg3:#26262c; --border:#2e2e35; --text:#e9e9ee; --dim:#9c9ca6; --faint:#6c6c76; --accent:#6c7bff; --danger:#e05252; }
+      :root.light { --bg:#f2f3f7; --bg2:#ffffff; --bg3:#ececf2; --border:#d9dae2; --text:#191a1f; --dim:#54555e; --faint:#7a7b85; --accent:#4a5ae0; }
+      * { box-sizing:border-box; margin:0; padding:0; }
+      body { font-family:system-ui,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+      header { display:flex; align-items:center; gap:14px; padding:16px 24px; border-bottom:1px solid var(--border); background:var(--bg2); }
+      h1 { font-size:20px; font-weight:600; }
+      button { padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--bg3); color:var(--text); cursor:pointer; font-size:13px; }
+      button:hover { filter:brightness(1.12); }
+      main { max-width:760px; margin:0 auto; padding:16px 24px; }
+      .row { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; }
+      .row:hover { background:var(--bg3); }
+      .ext-icon { width:38px; height:38px; flex-shrink:0; border-radius:10px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:16px; }
+      .info { flex:1; min-width:0; }
+      .info b { display:block; }
+      .info span { color:var(--faint); font-size:12px; }
+      .switch { width:38px; height:20px; border-radius:10px; border:none; background:var(--bg3); position:relative; cursor:pointer; }
+      .switch.on { background:var(--accent); }
+      .switch .knob { position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; transition:transform .15s; }
+      .switch.on .knob { transform:translateX(18px); }
+      .del { background:transparent; border:none; color:var(--dim); }
+      .del:hover { color:var(--danger); }
+      .empty { color:var(--faint); text-align:center; padding:40px 0; line-height:1.8; }
+      .load { margin-top:16px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Extensiones</h1>
+      <button id="load">Cargar carpeta…</button>
+    </header>
+    <main id="main">
+      <div class="store" style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);margin-bottom:14px">
+        <h2 style="font-size:14px;margin-bottom:8px;color:var(--dim)">Instalar desde Chrome Web Store</h2>
+        <div style="display:flex;gap:8px">
+          <input id="storeUrl" placeholder="Pega el ID o la URL de la extensión (ej. https://chromewebstore.google.com/detail/…)…" style="flex:1;min-width:0;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;outline:none" />
+          <button id="install">Instalar</button>
+        </div>
+        <div id="storeResult" style="margin-top:8px;font-size:12px;color:var(--faint)"></div>
+      </div>
+      <div id="list"></div>
+      <div class="load">
+        <p class="empty" style="padding:8px 0;text-align:left">Una extensión es una carpeta con un <code>manifest.json</code> que define <code>content_scripts</code>. Al instalar desde el almacén se descarga el <code>.crx</code> y se desempaqueta. Solo funcionan las extensiones basadas en content scripts simples (la API <code>chrome.*</code> completa no está implementada).</p>
+      </div>
+    </main>
+    <script>
+      var list = document.getElementById('list')
+
+      function render() {
+        browserAPI.extensions.list().then(function (items) {
+          list.innerHTML = ''
+          if (!items.length) { list.innerHTML = '<div class="empty">No hay extensiones instaladas</div>'; return }
+          items.forEach(function (e) {
+            var row = document.createElement('div')
+            row.className = 'row'
+            row.innerHTML =
+              '<span class="ext-icon"></span>' +
+              '<span class="info"><b></b><span></span></span>' +
+              '<button class="switch"></button>' +
+              '<button class="del">Quitar</button>'
+            row.querySelector('.ext-icon').textContent = (e.name || 'E').slice(0, 1).toUpperCase()
+            row.querySelector('.info b').textContent = e.name + ' ' + (e.version || '')
+            row.querySelector('.info span').textContent = (e.contentScripts || []).length + ' content script(s)'
+            var sw = row.querySelector('.switch')
+            sw.classList.toggle('on', !!e.enabled)
+            sw.innerHTML = '<span class="knob"></span>'
+            sw.onclick = function () {
+              var next = !e.enabled
+              browserAPI.extensions.setEnabled(e.id, next).then(render)
+            }
+            row.querySelector('.del').onclick = async function () {
+              await browserAPI.extensions.remove(e.id)
+              render()
+            }
+            list.appendChild(row)
+          })
+        })
+      }
+
+      document.getElementById('load').onclick = async function () {
+        var res = await browserAPI.extensions.load()
+        if (res && res.error) alert('Error: ' + res.error)
+        render()
+      }
+      document.getElementById('install').onclick = async function () {
+        var res = document.getElementById('storeResult')
+        var val = document.getElementById('storeUrl').value.trim()
+        if (!val) return
+        res.textContent = 'Descargando e instalando…'
+        this.disabled = true
+        var r = await browserAPI.extensions.installStore(val)
+        this.disabled = false
+        if (r && r.error) res.textContent = 'Error: ' + r.error
+        else res.textContent = r ? 'Instalada: ' + r.name + ' ' + (r.version || '') : 'No instalada'
+        document.getElementById('storeUrl').value = ''
+        render()
+      }
+      render()
+
+      browserAPI.settings.get().then(function (s) {
+        var light = s.theme === 'light' || (s.theme === 'system' && matchMedia('(prefers-color-scheme: light)').matches)
+        document.documentElement.classList.toggle('light', light)
+      })
+    </script>
+  </body>
+</html>
