@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, webFrame } = require('electron')
 
 function detectLoginSubmit() {
   document.addEventListener('submit', (e) => {
@@ -60,7 +60,7 @@ function injectCosmetic() {
   if (window !== window.top) return
   if (!/^https?:/.test(location.href)) return
   const host = location.hostname.toLowerCase()
-  ipcRenderer.invoke('adblock:cosmetic', host).then((css) => {
+  const apply = (css) => {
     if (!css) return
     try {
       const st = document.createElement('style')
@@ -68,8 +68,48 @@ function injectCosmetic() {
       st.textContent = css
       ;(document.head || document.documentElement).appendChild(st)
     } catch {}
+  }
+  const poll = (n) => {
+    ipcRenderer.invoke('adblock:cosmetic', host).then((css) => {
+      if (css) apply(css)
+      else if (n > 0) setTimeout(() => poll(n - 1), 1500)
+    }).catch(() => {})
+  }
+  poll(6)
+}
+
+function injectYoutubeAdBlock() {
+  const host = location.hostname.toLowerCase()
+  if (host !== 'youtube.com' && host !== 'www.youtube.com' && host !== 'music.youtube.com' && !host.endsWith('.youtube.com')) return
+  ipcRenderer.invoke('yt-ad-script').then((code) => {
+    if (!code) return
+    const inject = () => {
+      try {
+        if (!document.documentElement) return false
+        if (document.getElementById('nixer-yt-ad')) return true
+        const s = document.createElement('script')
+        s.id = 'nixer-yt-ad'
+        s.type = 'text/javascript'
+        s.textContent = code
+        ;(document.head || document.documentElement).appendChild(s)
+        return true
+      } catch {
+        return false
+      }
+    }
+    if (!inject()) {
+      let n = 0
+      const t = setInterval(() => {
+        if (inject() || n++ > 120) clearInterval(t)
+      }, 40)
+    }
+    try {
+      if (webFrame && webFrame.executeJavaScript) webFrame.executeJavaScript(code).catch(() => {})
+    } catch {}
   }).catch(() => {})
 }
+
+injectYoutubeAdBlock()
 
 document.addEventListener('DOMContentLoaded', () => {
   detectLoginSubmit()

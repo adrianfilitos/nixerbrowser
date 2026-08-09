@@ -7,7 +7,7 @@ export default function ShieldsPopup({ origin, anchor, onClose }) {
   useEffect(() => {
     window.api.shieldsGet(origin).then(setS)
     window.api.adblockRecent().then((list) => {
-      setRecent((list || []).filter((r) => r.url.indexOf(origin) === 0).slice(0, 8))
+      setRecent((list || []).filter((r) => r.pageOrigin === origin).slice(0, 8))
     })
   }, [origin])
 

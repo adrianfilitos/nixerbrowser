@@ -98,8 +98,8 @@ function logFile() {
   return path.join(app.getPath('userData'), 'adblock.log')
 }
 
-function logBlock(url, type) {
-  recent.unshift({ ts: Date.now(), url, type })
+function logBlock(url, type, pageOrigin) {
+  recent.unshift({ ts: Date.now(), url, type, pageOrigin: pageOrigin || '' })
   if (recent.length > 80) recent.pop()
   totalBlocked++
   try {
@@ -268,6 +268,14 @@ function pageHostOf(initiator) {
   }
 }
 
+function pageOriginOf(initiator) {
+  try {
+    return initiator ? new URL(initiator).origin : ''
+  } catch {
+    return ''
+  }
+}
+
 function init(sessionRef, getState) {
   ensureLoaded()
   sessionRef.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
@@ -280,51 +288,51 @@ function init(sessionRef, getState) {
       const host = url.hostname.toLowerCase()
       const origin = originOf(details.url)
       const type = details.resourceType || 'other'
-      const pageHost = pageHostOf(details.initiator)
+      const pageHost = pageHostOf(details.initiator) || pageHostOf(details.referrer)
+      const pageOrigin = pageOriginOf(details.initiator) || pageOriginOf(details.referrer) || origin
 
       if (st.blockAds) {
         // 0) Filtros EasyList/EasyPrivacy (reglas de red con excepciones)
         const fm = filters.matches(details.url, type, pageHost)
         if (fm) {
-          console.log('DBG_FILTER_BLOCK', details.url, type, pageHost)
-          bump(origin, type === 'script' ? 'scripts' : 'ads')
-          logBlock(details.url, 'filtro')
+          bump(pageOrigin, type === 'script' ? 'scripts' : 'ads')
+          logBlock(details.url, 'filtro', pageOrigin)
           return callback({ cancel: true })
         }
       }
 
       // 1) Host en la lista (bloquea TODO, incluida la página principal)
       if (st.blockAds && isBlocked(host)) {
-        bump(origin, 'ads')
-        logBlock(details.url, 'anuncio')
+        bump(pageOrigin, 'ads')
+        logBlock(details.url, 'anuncio', pageOrigin)
         return callback({ cancel: true })
       }
 
       // 2) Patrones de rastreo en subrecursos
       if (st.blockAds && type !== 'main_frame' && BLOCK_TYPES.has(type) && urlMatches(TRACKER_PATTERNS, details.url)) {
-        bump(origin, 'trackers')
-        logBlock(details.url, 'rastreador')
+        bump(pageOrigin, 'trackers')
+        logBlock(details.url, 'rastreador', pageOrigin)
         return callback({ cancel: true })
       }
 
       // 3) Patrones de anuncios en subrecursos
       if (st.blockAds && type !== 'main_frame' && BLOCK_TYPES.has(type) && urlMatches(AD_PATTERNS, details.url)) {
-        bump(origin, type === 'script' ? 'scripts' : 'ads')
-        logBlock(details.url, 'anuncio')
+        bump(pageOrigin, type === 'script' ? 'scripts' : 'ads')
+        logBlock(details.url, 'anuncio', pageOrigin)
         return callback({ cancel: true })
       }
 
       // 4) Bloqueo de scripts (ajuste manual)
       if (st.blockScripts && type === 'script') {
-        bump(origin, 'scripts')
-        logBlock(details.url, 'script')
+        bump(pageOrigin, 'scripts')
+        logBlock(details.url, 'script', pageOrigin)
         return callback({ cancel: true })
       }
 
       // 5) Bloqueo de imágenes (ajuste "mostrar imágenes")
       if (st.blockImages && type === 'image') {
-        bump(origin, 'ads')
-        logBlock(details.url, 'imagen')
+        bump(pageOrigin, 'ads')
+        logBlock(details.url, 'imagen', pageOrigin)
         return callback({ cancel: true })
       }
     } catch {}

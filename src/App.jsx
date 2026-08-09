@@ -921,7 +921,7 @@ export default function App() {
           onShields={(btn) => {
             if (!(activeTab && activeTab.url && activeTab.url.startsWith('http'))) return
             setShieldsAnchor(btn ? btn.getBoundingClientRect() : null)
-            setShieldsOrigin(activeTab.url)
+            try { setShieldsOrigin(new URL(activeTab.url).origin) } catch { setShieldsOrigin(activeTab.url) }
           }}
           onSiteInfo={(btn) => {
             if (!(activeTab && activeTab.url)) return

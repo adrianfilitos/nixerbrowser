@@ -772,11 +772,14 @@ function registerIpc() {
   ipcMain.handle('adblock:refresh', () => { adblock.refresh(); return true })
   ipcMain.handle('adblock:recent', () => adblock.recentLog())
   ipcMain.handle('adblock:cosmetic', (_e, host) => adblock.cosmeticCss(host))
+  ipcMain.handle('yt-ad-script', () => require('./yt-script'))
   ipcMain.handle('shields:get', (_e, origin) => {
-    const g = guardState(origin)
-    const blocked = adblock.stats().blocked[origin] || { ads: 0, scripts: 0, trackers: 0 }
+    let o = origin
+    try { o = new URL(origin).origin } catch {}
+    const g = guardState(o)
+    const blocked = adblock.stats().blocked[o] || { ads: 0, scripts: 0, trackers: 0 }
     return {
-      origin,
+      origin: o,
       blockAds: g.blockAds,
       blockScripts: g.blockScripts,
       blockCookies: g.blockThirdPartyCookies,

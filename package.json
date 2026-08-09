@@ -16,6 +16,8 @@
     "test:adblock": "electron electron/test-adblock.js",
     "test:filters": "electron electron/test-filters.js",
     "test:db": "electron electron/test-db.js",
+    "test:shields": "electron electron/test-shields.js",
+    "test:youtube": "electron electron/test-youtube.js",
     "test:extensions": "electron electron/test-extensions.js",
     "test:newtab": "electron electron/test-newtab.js",
     "test:nixer": "electron electron/test-nixer.js",
