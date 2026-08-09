@@ -348,7 +348,11 @@ function init(sessionRef, getState) {
         if (k.toLowerCase() === 'cookie') delete h[k]
       }
     }
-    if (st.sendDnt) h['DNT'] = '1'
+    if (st.sendDnt) {
+      let hh = ''
+      try { hh = new URL(details.url).hostname.toLowerCase() } catch {}
+      if (hh !== 'google.com' && !hh.endsWith('.google.com')) h['DNT'] = '1'
+    }
     callback({ requestHeaders: h })
   })
 

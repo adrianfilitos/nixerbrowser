@@ -25,7 +25,7 @@ const DEFAULT_SETTINGS = {
   blockThirdPartyCookies: true,
   blockScripts: false,
   httpsUpgrade: false,
-  sendDnt: true,
+  sendDnt: false,
   customSearchEngines: [],
   aiBaseUrl: '',
   aiApiKey: '',
