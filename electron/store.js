@@ -123,7 +123,10 @@ function encJson(v) {
 function decodeSettingValue(value) {
   if (value === undefined || value === null) return undefined
   const t = typeof value
-  if (t === 'string' || t === 'number' || t === 'boolean') return value
+  if (t !== 'string') return value
+  if (value === 'true') return true
+  if (value === 'false') return false
+  if (value !== '' && /^-?\d+(\.\d+)?$/.test(value)) return Number(value)
   try { return JSON.parse(value) } catch { return value }
 }
 

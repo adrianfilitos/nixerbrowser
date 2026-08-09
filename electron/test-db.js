@@ -21,6 +21,7 @@ app.whenReady().then(async () => {
   store.addBookmark({ url: 'https://ejemplo.com', title: 'Ejemplo' })
   store.addHistory({ url: 'https://historia.com', title: 'Historia' })
   store.setSettings({ aiApiKey: 'sk-secreto-ia', autofillProfile: { name: 'Ana García', email: 'ana@test.com', zip: '28001' } })
+  store.setSettings({ blockAds: false, minimizeToTray: false, showBookmarksBar: false, tabMinWidth: 150, defaultZoom: 1, aiTemperature: 0.7, customSearchEngines: [{ id: 'custom-1', name: 'MiMotor', tpl: 'https://x.com/?q={q}' }] })
   store.addPassword({ origin: 'https://banco.com', username: 'ana', password: 'clave-super-secreta' })
   store.addReadingItem({ title: 'Articulo', url: 'https://art.com', text: 'contenido privado del articulo' })
   store.saveWorkspace('Trabajo', [{ url: 'https://a.com', title: 'A' }])
@@ -53,6 +54,15 @@ app.whenReady().then(async () => {
   checks.groups = tg.g1 && tg.g1.name === 'Grupo'
   checks.recent = rs.includes('consulta reciente')
   checks.extension = ext.length === 1 && ext[0].id === 'ext1'
+
+  // Round-trip tipado: los booleanos/numéricos/arrays deben recuperar su tipo real
+  checks.blockAdsOff = s.blockAds === false
+  checks.minimizeToTrayOff = s.minimizeToTray === false
+  checks.showBookmarksBarOff = s.showBookmarksBar === false
+  checks.tabMinWidthNum = s.tabMinWidth === 150
+  checks.defaultZoomNum = s.defaultZoom === 1
+  checks.temperatureNum = s.aiTemperature === 0.7
+  checks.customEnginesArr = Array.isArray(s.customSearchEngines) && s.customSearchEngines[0] && s.customSearchEngines[0].id === 'custom-1'
 
   // --- Fase 3: verificar que NO hay texto plano sensible en la DB ---
   const dbFile = path.join(PROFILE, 'nixer.db')
