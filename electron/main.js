@@ -31,6 +31,7 @@ const search = require('./search')
 const menus = require('./menu')
 const pageStyle = require('./page-style')
 const sqlite = require('./sqlite')
+const translate = require('./translate')
 const { autoUpdater } = require('electron-updater')
 
 if (store.settings().hardwareAcceleration === false) {
@@ -585,6 +586,7 @@ function registerIpc() {
   })
   ipcMain.on('search:record', (_e, q) => store.addSearch(q))
   ipcMain.handle('ai:chat', (_e, messages) => ai.chat(messages || []))
+  ipcMain.handle('translate:text', (_e, text, tl) => translate.translateText(String(text || ''), tl))
   ipcMain.handle('adblock:stats', () => adblock.stats())
   ipcMain.handle('adblock:refresh', () => { adblock.refresh(); return true })
   ipcMain.handle('adblock:recent', () => adblock.recentLog())
@@ -659,6 +661,8 @@ const { buildMenu, showContentMenu } = menus.createMenus({
   ai,
   readerGet: reader.getReader,
   readerPut: reader.put,
+  translatePage: translate.translatePage,
+  translateText: translate.translateText,
 })
 
 app.on('web-contents-created', (_e, wc) => {

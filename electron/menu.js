@@ -51,7 +51,7 @@ function tr(label) {
 }
 
 function createMenus(deps) {
-  const { createWindow, extractReader, savePageOf, saveAsUrl, captureScreenshot, togglePip, ai, readerGet, readerPut } = deps
+  const { createWindow, extractReader, savePageOf, saveAsUrl, captureScreenshot, togglePip, ai, readerGet, readerPut, translatePage, translateText } = deps
 
   function buildMenu() {
     const act = (action, data) => { const c = currentCtx(); if (c) sendUi(c, action, data) }
@@ -125,7 +125,7 @@ function createMenus(deps) {
           { type: 'separator' },
           { label: 'Copiar URL', accelerator: 'CmdOrCtrl+Shift+L', click: () => act('copy-url') },
           { label: 'Ver código fuente', accelerator: 'CmdOrCtrl+U', click: () => act('view-source') },
-          { label: 'Traducir página', click: () => act('translate-page') },
+          { label: 'Traducir página', click: () => translatePage(wc()) },
           { label: 'Instalar sitio como acceso directo', click: () => act('install-site') },
           { label: 'Silenciar pestaña', accelerator: 'CmdOrCtrl+M', click: () => act('toggle-mute') },
           { type: 'separator' },
@@ -233,7 +233,15 @@ function createMenus(deps) {
     template.push({ label: 'Copiar', role: 'copy' })
     template.push({ label: 'Copiar como texto plano', click: () => clipboard.writeText(params.selectionText) })
     template.push({ label: 'Copiar enlace con título', click: () => { const t = (params.linkText || params.selectionText || '').trim(); clipboard.writeText((t ? t + ' ' : '') + (params.linkURL || '')) } })
-    template.push({ label: 'Traducir selección', click: () => sendUi(ctx, 'open-tab', 'https://translate.google.com/?sl=auto&tl=es&text=' + encodeURIComponent(params.selectionText)) })
+      template.push({ label: 'Traducir selección', click: async () => {
+        const out = await translateText(params.selectionText, 'es')
+        if (out) {
+          const rid = readerPut({ title: 'Traducción', url: '', text: out })
+          sendUi(ctx, 'open-reader', rid)
+        } else {
+          sendUi(ctx, 'ui-toast', { text: 'No se pudo traducir (sin conexión?)', kind: 'error' })
+        }
+      } })
     template.push({ label: 'Leer selección en voz alta', click: () => readAloud(wc, params.selectionText) })
     template.push({ label: 'Contar palabras', click: () => { const w = params.selectionText.trim().split(/\s+/).filter(Boolean).length; const c = params.selectionText.length; sendUi(ctx, 'ui-toast', { text: w + ' palabras · ' + c + ' caracteres', kind: 'info' }) } })
     template.push({

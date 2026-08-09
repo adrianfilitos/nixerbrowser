@@ -104,6 +104,9 @@ if (IS_INTERNAL_PAGE) {
   ai: {
     chat: (messages) => ipcRenderer.invoke('ai:chat', messages),
   },
+  translate: {
+    text: (text, tl) => ipcRenderer.invoke('translate:text', text, tl),
+  },
   adblock: {
     stats: () => ipcRenderer.invoke('adblock:stats'),
     refresh: () => ipcRenderer.invoke('adblock:refresh'),
