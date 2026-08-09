@@ -48,7 +48,7 @@ async function searchSuggestions(q) {
   try {
     const res = await net.fetch(tpl.replace('{q}', encodeURIComponent(term)), {
       signal: AbortSignal.timeout(2500),
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' + String(process.versions.chrome).split('.')[0] + '.0.0.0 Safari/537.36' },
     })
     if (!res.ok) return []
     const json = await res.json().catch(() => null)

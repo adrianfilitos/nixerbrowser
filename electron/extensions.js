@@ -101,9 +101,10 @@ async function installExtensionFromStore(storeId) {
   const id = String(storeId || '').trim().toLowerCase().match(/[a-z]{32}/)
   if (!id) return { error: 'ID no válido (deben ser 32 caracteres a-z). Pega la URL de la extensión de Chrome Web Store.' }
   const extId = id[0]
-  const url = 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=136.0.0.0&acceptformat=crx2,crx3&x=id%3D' + extId + '%26installsource%3Dondemand%26uc'
+  const cver = String(process.versions.chrome).split('.')[0] + '.0.0.0'
+  const url = 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=' + cver + '&acceptformat=crx2,crx3&x=id%3D' + extId + '%26installsource%3Dondemand%26uc'
   try {
-    const res = await net.fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36' } })
+    const res = await net.fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' + cver + ' Safari/537.36' } })
     if (!res.ok) return { error: 'No se pudo descargar (HTTP ' + res.status + ')' }
     const buf = Buffer.from(await res.arrayBuffer())
     const zipStart = crxZipOffset(buf)

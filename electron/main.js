@@ -5,6 +5,8 @@ const os = require('os')
 const crypto = require('crypto')
 const { DEV_SERVER_URL, PRIVATE_PARTITION, PROFILE } = require('./constants')
 
+const CHROME_MAJOR = String(process.versions.chrome).split('.')[0]
+
 app.commandLine.appendSwitch('js-flags', '--expose-gc')
 app.commandLine.appendSwitch('disable-features', 'OptimizationHints,MediaRouter,TranslateUI,NetworkTimeServiceQuerying,WebRtcLocalEcho,FontSrcLocalMatching,HistoryManipulationIntervention')
 
@@ -887,12 +889,12 @@ app.on('web-contents-created', (_e, wc) => {
     try {
       wc.executeJavaScript(`(() => {
         try {
-          const brands = [{ brand: 'Chromium', version: '136' }, { brand: 'Google Chrome', version: '136' }, { brand: 'Not=A?Brand', version: '99' }]
+          const brands = [{ brand: 'Chromium', version: '${CHROME_MAJOR}' }, { brand: 'Google Chrome', version: '${CHROME_MAJOR}' }, { brand: 'Not=A?Brand', version: '99' }]
           const fake = {
             brands,
             mobile: false,
             platform: 'Windows',
-            getHighEntropyValues: () => Promise.resolve({ brands, mobile: false, platform: 'Windows', architecture: 'x86', bitness: '64', platformVersion: '10.0.0', uaFullVersion: '136.0.0.0' }),
+            getHighEntropyValues: () => Promise.resolve({ brands, mobile: false, platform: 'Windows', architecture: 'x86', bitness: '64', platformVersion: '10.0.0', uaFullVersion: '${CHROME_MAJOR}.0.0.0' }),
           }
           Object.defineProperty(Navigator.prototype, 'userAgentData', { configurable: true, get: () => fake })
           if (!window.chrome) window.chrome = {}
@@ -916,7 +918,7 @@ app.whenReady().then(() => {
     .replace(/\s+/g, ' ')
     .trim()
   const CHROME_HINTS = {
-    'sec-ch-ua': '"Chromium";v="136", "Google Chrome";v="136", "Not=A?Brand";v="99"',
+    'sec-ch-ua': `"Chromium";v="${CHROME_MAJOR}", "Google Chrome";v="${CHROME_MAJOR}", "Not=A?Brand";v="99"`,
     'sec-ch-ua-mobile': '?0',
     'sec-ch-ua-platform': '"Windows"',
     'user-agent': ua,
@@ -973,6 +975,15 @@ async function runSmoke() {
     const uiWc = wctx.win.webContents
     await new Promise((r) => setTimeout(r, 3000))
 
+    results.webviews = await uiWc.executeJavaScript(`(async () => {
+      for (let i = 0; i < 60; i++) {
+        const n = document.querySelectorAll('webview').length
+        if (n > 0) return n
+        await new Promise((r) => setTimeout(r, 500))
+      }
+      return 0
+    })()`)
+
     const errors = []
     session.defaultSession.webRequest.onErrorOccurred({ urls: ['*://*/*'] }, (d) => errors.push(d))
 
@@ -982,8 +993,6 @@ async function runSmoke() {
     })
     await new Promise((r) => server.listen(0, '127.0.0.1', r))
     const port = server.address().port
-
-    results.webviews = await uiWc.executeJavaScript(`document.querySelectorAll('webview').length`)
 
     results.autocomplete = await uiWc.executeJavaScript(`
       (async () => {
