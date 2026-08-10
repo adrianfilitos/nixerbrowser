@@ -35,7 +35,6 @@ const menus = require('./menu')
 const pageStyle = require('./page-style')
 const sqlite = require('./sqlite')
 const translate = require('./translate')
-const { autoUpdater } = require('electron-updater')
 
 let dragState = null
 let dragTarget = null // { wc, winCtx, attached, entered }
@@ -914,30 +913,29 @@ app.on('web-contents-created', (_e, wc) => {
 })
 
 app.whenReady().then(() => {
-  const ua = session.defaultSession
+  const ap = store.settings().autoplayPolicy
+  try { session.defaultSession.setAutoplayPolicy(ap) } catch {}
+  try { session.fromPartition(PRIVATE_PARTITION).setAutoplayPolicy(ap) } catch {}
+  system.syncLoginItem()
+  const cleanUa = session.defaultSession
     .getUserAgent()
     .replace(/navegador\/[\d.]+/i, '')
     .replace(/NixerBrowser\/[\d.]+/i, '')
     .replace(/Electron\/[\d.]+/i, '')
     .replace(/\s+/g, ' ')
     .trim()
-  const CHROME_HINTS = {
+  const STORE_HINTS = {
     'sec-ch-ua': `"Chromium";v="${CHROME_MAJOR}", "Google Chrome";v="${CHROME_MAJOR}", "Not=A?Brand";v="99"`,
     'sec-ch-ua-mobile': '?0',
     'sec-ch-ua-platform': '"Windows"',
-    'user-agent': ua,
+    'user-agent': cleanUa,
   }
-  session.defaultSession.setUserAgent(ua)
-  session.fromPartition(PRIVATE_PARTITION).setUserAgent(ua)
-  const ap = store.settings().autoplayPolicy
-  try { session.defaultSession.setAutoplayPolicy(ap) } catch {}
-  try { session.fromPartition(PRIVATE_PARTITION).setAutoplayPolicy(ap) } catch {}
-  system.syncLoginItem()
-  for (const ses of [session.defaultSession, session.fromPartition(PRIVATE_PARTITION)]) {
-    ses.webRequest.onBeforeSendHeaders({ urls: ['*://chromewebstore.google.com/*', '*://accounts.google.com/*', '*://google.com/*', '*://*.google.com/*', '*://*.googleapis.com/*'] }, (details, cb) => {
-      cb({ requestHeaders: Object.assign({}, details.requestHeaders, CHROME_HINTS) })
-    })
-  }
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['*://chromewebstore.google.com/*'] }, (details, cb) => {
+    cb({ requestHeaders: Object.assign({}, details.requestHeaders, STORE_HINTS) })
+  })
+  session.fromPartition(PRIVATE_PARTITION).webRequest.onBeforeSendHeaders({ urls: ['*://chromewebstore.google.com/*'] }, (details, cb) => {
+    cb({ requestHeaders: Object.assign({}, details.requestHeaders, STORE_HINTS) })
+  })
   const dl = store.settings().downloadPath
   if (dl) {
     try { session.defaultSession.setDownloadPath(dl) } catch {}
@@ -959,9 +957,6 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
   setInterval(util.gcHiddenWebviews, 45000)
-  try {
-    if (app.isPackaged) autoUpdater.checkForUpdatesAndNotify().catch(() => {})
-  } catch {}
   const startUrl = process.argv.find((a) => /^https?:\/\//i.test(a) && !store.isLoopbackUrl(a))
   if (startUrl) {
     setTimeout(() => {

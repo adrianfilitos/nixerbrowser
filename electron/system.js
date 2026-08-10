@@ -33,7 +33,7 @@ function syncLoginItem() {
 
 const AUTO_ALLOW_PERMS = new Set(['fullscreen', 'clipboard-sanitized-write', 'pointerLock', 'openExternal', 'midiSysex'])
 const ASK_PERMS = new Set(['media', 'geolocation', 'notifications', 'clipboard-read', 'display-capture', 'keyboardLock', 'window-management', 'fileSystem'])
-const DENY_PERMS = new Set(['webAuthn'])
+const DENY_PERMS = new Set([])
 const pendingPermits = new Map()
 let permId = 0
 

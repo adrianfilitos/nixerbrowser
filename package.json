@@ -20,6 +20,7 @@
     "test:youtube": "electron electron/test-youtube.js",
     "test:uach": "electron electron/test-uach.js",
     "test:google": "electron electron/test-google.js",
+    "test:auth-flow": "electron electron/test-auth-flow.js",
     "test:extensions": "electron electron/test-extensions.js",
     "test:newtab": "electron electron/test-newtab.js",
     "test:nixer": "electron electron/test-nixer.js",
@@ -53,13 +54,6 @@
   "build": {
     "appId": "com.nixer.browser",
     "productName": "Nixer Browser",
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "adrianfilitos",
-        "repo": "nixerbrowser"
-      }
-    ],
     "directories": {
       "output": "release"
     },
