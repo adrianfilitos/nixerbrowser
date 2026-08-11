@@ -32,7 +32,7 @@ app.whenReady().then(async () => {
   await ui.executeJavaScript(`window.__status = 'none'`)
   results.gateCtx = { tv: store.settings().tvMode, ov: store.settings().gameOverlay }
 
-  store.setSettings({ tvMode: false })
+  store.setSettings({ tvMode: false, gameOverlay: false })
   ipcMain.emit('tv:input-focus', {})
   await delay(300)
   results.gateOff = await ui.executeJavaScript('window.__status')

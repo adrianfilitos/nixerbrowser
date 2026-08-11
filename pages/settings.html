@@ -38,6 +38,7 @@
       .control { flex-shrink:0; display:flex; align-items:center; gap:10px; }
       input[type="text"], input[type="url"], input[type="password"], select { padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:13px; outline:none; min-width:220px; }
       input[type="text"]:focus, input[type="url"]:focus, input[type="password"]:focus, select:focus { border-color:var(--accent); }
+      input.invalid, input.invalid:focus { border-color:#e05656; }
       input[type="color"] { width:44px; height:32px; padding:2px; border:none; background:none; cursor:pointer; }
       input[type="range"] { accent-color:var(--accent); }
       .switch { position:relative; display:inline-block; width:38px; height:22px; flex-shrink:0; }
@@ -300,7 +301,9 @@
           <h2>Overlay en juegos</h2>
           <div class="card">
             <div class="field"><div class="meta"><div class="label">Overlay de navegador en juegos</div><div class="desc">Mini navegador siempre al frente sobre el juego; se abre con el atajo o con el combo del mando (funciona con juegos en ventana o pantalla completa sin bordes)</div></div><div class="control"><label class="switch"><input type="checkbox" id="gameOverlay" /><span class="track"><span class="thumb"></span></span></label></div></div>
-            <div class="field"><div class="meta"><div class="label">Atajo de teclado</div><div class="desc">Formato Electron, p.ej. CommandOrControl+Shift+O</div></div><div class="control"><input type="text" id="overlayHotkey" /></div></div>
+            <div class="field"><div class="meta"><div class="label">Atajo de teclado</div><div class="desc">Formato Electron · predeterminado: CommandOrControl+Shift+O</div></div>
+              <div class="control" style="display:flex;gap:8px;align-items:center"><input type="text" id="overlayHotkey" placeholder="CommandOrControl+Shift+O" /><button class="btn" id="overlayHotkeyReset" title="Volver al atajo predeterminado">Predeterminado</button></div>
+              <div class="meta"><div class="desc" id="overlayHotkeyHint" style="color:#e05656;display:none">Atajo no válido: no se guardó (se mantiene el anterior)</div></div></div>
             <div class="field"><div class="meta"><div class="label">Combo del mando</div><div class="desc">Botones para abrir/cerrar el overlay con el gamepad (XInput)</div></div>
               <div class="control"><select id="overlayChord"><option value="startBack">Start + Back</option><option value="lbRbStart">LB + RB + Start</option><option value="off">Desactivado</option></select></div></div>
             <div class="field"><div class="meta"><div class="label">Gancho de teclado de bajo nivel</div><div class="desc">Captura el atajo incluso si el juego retiene el teclado. Algunos anti-cheat kernel pueden bloquearlo</div></div><div class="control"><label class="switch"><input type="checkbox" id="overlayHookLL" /><span class="track"><span class="thumb"></span></span></label></div></div>
@@ -669,9 +672,55 @@
         bind('tvAutoFullscreen', 'tvAutoFullscreen')
         bind('tvKeyboard', 'tvKeyboard')
         bind('gameOverlay', 'gameOverlay')
-        bind('overlayHotkey', 'overlayHotkey')
         bind('overlayChord', 'overlayChord')
         bind('overlayHookLL', 'overlayHookLL')
+        var OVERLAY_MODS = /^(commandorcontrol|cmd|command|ctrl|control|shift|alt|option|altgr|super|meta)$/i
+        var OVERLAY_KEYS = /^[a-z0-9]$|^(f[1-9]|f1[0-9]|f2[0-4]|enter|return|tab|space|backspace|delete|insert|home|end|pageup|pagedown|escape|esc|up|down|left|right|printscreen|scrolllock|pause|numlock|capslock|comma|period|semicolon|slash|backslash|bracketleft|bracketright|minus|equal)$/i
+        function isValidAccelerator(v) {
+          var s = String(v || '').trim()
+          if (!s) return false
+          var parts = s.split('+').map(function (x) { return x.trim() })
+          if (!parts.length) return false
+          if (!OVERLAY_KEYS.test(parts[parts.length - 1])) return false
+          for (var i = 0; i < parts.length - 1; i++) {
+            if (!OVERLAY_MODS.test(parts[i])) return false
+          }
+          return true
+        }
+        (function () {
+          var el = document.getElementById('overlayHotkey')
+          var hint = document.getElementById('overlayHotkeyHint')
+          var reset = document.getElementById('overlayHotkeyReset')
+          if (!el) return
+          function showInvalid() {
+            el.classList.add('invalid')
+            if (hint) hint.style.display = ''
+          }
+          function clearInvalid() {
+            el.classList.remove('invalid')
+            if (hint) hint.style.display = 'none'
+          }
+          el.addEventListener('change', function () {
+            var v = el.value.trim()
+            if (!v) return
+            if (isValidAccelerator(v)) {
+              clearInvalid()
+              settings.overlayHotkey = v
+              persist({ overlayHotkey: v }, 'Atajo del overlay')
+            } else {
+              showInvalid()
+            }
+          })
+          if (reset) {
+            reset.addEventListener('click', function () {
+              var def = 'CommandOrControl+Shift+O'
+              el.value = def
+              clearInvalid()
+              settings.overlayHotkey = def
+              persist({ overlayHotkey: def }, 'Atajo del overlay')
+            })
+          }
+        })()
         bind('memorySaver', 'memorySaver')
         bind('language', 'language', { label: 'Se aplicará al reiniciar' })
         bind('hardwareAcceleration', 'hardwareAcceleration', { label: 'Se aplicará al reiniciar' })

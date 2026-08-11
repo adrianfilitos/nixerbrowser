@@ -299,9 +299,28 @@ function stopXinputPoll() {
   xinputTimer = null
 }
 
+function isValidAccelerator(v) {
+  const s = String(v || '').trim()
+  if (!s) return false
+  const parts = s.split('+').map((x) => x.trim())
+  if (!parts.length) return false
+  const MODS = /^(commandorcontrol|cmd|command|ctrl|control|shift|alt|option|altgr|super|meta)$/i
+  const KEYS = /^[a-z0-9]$|^(f[1-9]|f1[0-9]|f2[0-4]|enter|return|tab|space|backspace|delete|insert|home|end|pageup|pagedown|escape|esc|up|down|left|right|printscreen|scrolllock|pause|numlock|capslock|comma|period|semicolon|slash|backslash|bracketleft|bracketright|minus|equal)$/i
+  if (!KEYS.test(parts[parts.length - 1])) return false
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (!MODS.test(parts[i])) return false
+  }
+  return true
+}
+
 function registerHotkey() {
   const s = settings()
   const accel = s.overlayHotkey || 'CommandOrControl+Shift+O'
+  if (!isValidAccelerator(accel)) {
+    console.log('[OVL] atajo no válido:', accel)
+    if (onToast) onToast('Atajo de teclado no válido: ' + accel, 'info')
+    return
+  }
   if (s.overlayHookLL !== false) {
     if (llHook) return
     if (installLowLevelHook(accel)) {
@@ -372,4 +391,4 @@ function getDebug() {
   }
 }
 
-module.exports = { init, applySettings, shutdown, toggleOverlay, getWindow, getDebug, registerHotkey }
+module.exports = { init, applySettings, shutdown, toggleOverlay, getWindow, getDebug, registerHotkey, isValidAccelerator }

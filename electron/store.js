@@ -75,7 +75,7 @@ const DEFAULT_SETTINGS = {
   tvMode: false,
   tvAutoFullscreen: true,
   tvKeyboard: 'own',
-  gameOverlay: false,
+  gameOverlay: true,
   overlayHotkey: 'CommandOrControl+Shift+O',
   overlayChord: 'startBack',
   overlayHookLL: true,

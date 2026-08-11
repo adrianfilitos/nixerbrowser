@@ -767,6 +767,9 @@ function registerIpc() {
     }
     util.broadcastSettings()
     overlayMod.applySettings()
+    if (patch && patch.overlayHotkey !== undefined && !overlayMod.isValidAccelerator(patch.overlayHotkey)) {
+      broadcastToast('Atajo de teclado no válido: ' + patch.overlayHotkey + ' (no se guardó)', 'info')
+    }
   })
   ipcMain.handle('search:engines', () => ({ engines: store.engines(), defaultId: store.settings().defaultSearchEngine }))
   ipcMain.handle('search:url', (_e, q) => store.searchUrl(q))
