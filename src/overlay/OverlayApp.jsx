@@ -25,7 +25,10 @@ export default function OverlayApp() {
   const [url, setUrl] = useState('')
   const [nav, setNav] = useState({ canGoBack: false, canGoForward: false, isLoading: false })
   const [viewInfo, setViewInfo] = useState(null)
-  const wvRef = useRef(null)
+  const [tabs, setTabs] = useState(() => [{ id: 't0', title: 'Nueva pestaña', url: '', src: 'https://www.google.com' }])
+  const [activeId, setActiveId] = useState('t0')
+  const elsRef = useRef(new Map())
+  const tabSeq = useRef(0)
   const cursorRef = useRef({ x: 0, y: 0, visible: false })
   const dragRef = useRef(false)
   const kbRef = useRef(null)
@@ -49,7 +52,50 @@ export default function OverlayApp() {
     })
   }, [])
 
-  const el = () => wvRef.current
+  const activeTab = tabs.find((t) => t.id === activeId) || null
+
+  function el() {
+    return activeId ? elsRef.current.get(activeId) || null : null
+  }
+
+  function updateTab(id, patch) {
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+  }
+
+  function newTab(target) {
+    const id = 't' + (++tabSeq.current)
+    const t = { id, title: 'Nueva pestaña', url: target || '', src: target || 'https://www.google.com' }
+    setTabs((prev) => [...prev, t])
+    setActiveId(id)
+    setUrl(t.url)
+  }
+
+  function switchTab(id) {
+    const t = tabs.find((x) => x.id === id)
+    setActiveId(id)
+    setUrl(t ? t.url : '')
+  }
+
+  function closeTab(id) {
+    const i = tabs.findIndex((t) => t.id === id)
+    const next = tabs.filter((t) => t.id !== id)
+    if (!next.length) { window.api.close(); return }
+    if (activeId === id) {
+      const n = next[Math.min(i, next.length - 1)]
+      setActiveId(n.id)
+      setUrl(n.url)
+    }
+    setTabs(next)
+  }
+
+  function cycleTab(delta) {
+    if (tabs.length < 2) return
+    const i = tabs.findIndex((t) => t.id === activeId)
+    if (i < 0) return
+    const n = tabs[(i + delta + tabs.length) % tabs.length]
+    setActiveId(n.id)
+    setUrl(n.url)
+  }
 
   function pokeActivity() {
     setTvIdle(false)
@@ -269,10 +315,10 @@ export default function OverlayApp() {
         rumble(25, 0.3, 0.3)
         return
       }
-      case 'tabNext': navAction('goForward'); return
-      case 'tabPrev': navAction('goBack'); return
-      case 'tabNew': navAction('reload'); rumble(30, 0.3, 0.3); return
-      case 'tabClose': window.api.close(); return
+      case 'tabNext': cycleTab(1); return
+      case 'tabPrev': cycleTab(-1); return
+      case 'tabNew': newTab(); rumble(30, 0.3, 0.3); return
+      case 'tabClose': if (activeTab) closeTab(activeTab.id); rumble(30, 0.3, 0.3); return
       case 'navBack': navAction('goBack'); return
       case 'navForward': navAction('goForward'); return
       case 'up':
@@ -347,12 +393,22 @@ export default function OverlayApp() {
     else if (/^[\w-]+(\.[\w-]+)+([/:?#].*)?$/.test(q)) target = 'https://' + q
     else target = 'https://www.google.com/search?q=' + encodeURIComponent(q)
     wv.loadURL(target)
+    if (activeId) updateTab(activeId, { url: target })
     setUrl(target)
-    wvRef.current && wvRef.current.blur && wvRef.current.blur()
+    if (wv.blur) wv.blur()
   }
 
   return (
     <div className="overlay-app">
+      <div className="overlay-tabs">
+        {tabs.map((t) => (
+          <div key={t.id} className={'ov-tab' + (t.id === activeId ? ' active' : '')} onClick={() => switchTab(t.id)}>
+            <span className="ov-tab-title">{t.title || 'Nueva pestaña'}</span>
+            <button className="ov-tab-close" title="Cerrar pestaña" onClick={(e) => { e.stopPropagation(); closeTab(t.id) }}>×</button>
+          </div>
+        ))}
+        <button className="ov-tab-new" title="Nueva pestaña" onClick={() => newTab()}>+</button>
+      </div>
       <div className="overlay-header">
         <button className="ov-btn" title="Atrás" onClick={() => navAction('goBack')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
@@ -371,18 +427,20 @@ export default function OverlayApp() {
         </button>
       </div>
       <div className="overlay-body">
-        {viewInfo && (
+        {viewInfo && tabs.map((t) => (
           <webview
-            ref={wvRef}
-            className="overlay-webview"
+            key={t.id}
+            ref={(elw) => { if (elw) elsRef.current.set(t.id, elw); else elsRef.current.delete(t.id) }}
+            className={'overlay-webview' + (t.id === activeId ? ' active' : '')}
             preload={viewInfo.preload || undefined}
-            src="https://www.google.com"
-            onDidNavigate={(e) => setUrl(e.url)}
-            onDidNavigateInPage={(e) => setUrl(e.url)}
+            src={t.src}
+            onDidNavigate={(e) => { updateTab(t.id, { url: e.url }); if (t.id === activeId) setUrl(e.url) }}
+            onDidNavigateInPage={(e) => { updateTab(t.id, { url: e.url }); if (t.id === activeId) setUrl(e.url) }}
+            onPageTitleUpdated={(e) => updateTab(t.id, { title: e.title })}
             onDidStartLoading={() => setNav((n) => ({ ...n, isLoading: true }))}
             onDidStopLoading={() => setNav((n) => ({ ...n, isLoading: false }))}
           />
-        )}
+        ))}
       </div>
       <GamepadHud
         connected={gpConnected}

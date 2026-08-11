@@ -2501,5 +2501,87 @@ webview.page-view.active {
   flex: 1;
   width: 100%;
   height: 100%;
+  display: none;
+}
+.overlay-webview.active {
   display: flex;
+}
+.overlay-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px 8px 0;
+  background: #161616;
+  overflow-x: auto;
+  user-select: none;
+  scrollbar-width: none;
+}
+.overlay-tabs::-webkit-scrollbar {
+  display: none;
+}
+.ov-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 90px;
+  max-width: 150px;
+  height: 28px;
+  padding: 0 6px 0 10px;
+  border-radius: 7px 7px 0 0;
+  background: #232323;
+  color: #b9b9b9;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 1;
+  -webkit-app-region: no-drag;
+}
+.ov-tab:hover {
+  background: #2b2b2b;
+}
+.ov-tab.active {
+  background: #1b1b1b;
+  color: #fff;
+}
+.ov-tab-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ov-tab-close {
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #8a8a8a;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ov-tab-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+.ov-tab-new {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #b9b9b9;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  align-self: center;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+.ov-tab-new:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }

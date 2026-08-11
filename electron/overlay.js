@@ -70,23 +70,11 @@ function sameHwnd(a, b) {
   try { return !!a && !!b && koffi.address(a) === koffi.address(b) } catch { return false }
 }
 
-// Desbloquea el "foreground lock" de Windows para poder traer el overlay al
-// primer plano incluso cuando otra app (un juego) tiene el foco. SPI pone el
-// timeout de bloqueo a 0 y el doble toque de Alt es el truco clásico que
-// libera la restricción de SetForegroundWindow.
-function unlockForeground(h) {
-  try {
-    const spi = user32.func('__stdcall', 'SystemParametersInfoW', 'int', ['uint32', 'uint32', koffi.pointer('void'), 'uint32'])
-    spi(0x2001, 0, null, 0)
-  } catch {}
-  try {
-    const kb = user32.func('__stdcall', 'keybd_event', 'void', ['uint8', 'uint8', 'uint32', 'intptr'])
-    kb(0x12, 0, 0, 0)
-    kb(0x12, 0, 2, 0)
-  } catch {}
-  try { setFgFn(h) } catch {}
-}
-
+// bringToFront SUAVE: solo muestra y trae la ventana al frente sin robar el
+// foco de forma agresiva ni tocar el modo del juego. NO usa SPI/Alt-tap/
+// SetForegroundWindow forzado, que es lo que sacaba al juego de su modo
+// compuesto y degradaba su resolucion (720p estirada a 1080p). Sobre juegos
+// en ventana/sin bordes/FSO la ventana topmost se dibuja encima igualmente.
 function bringToFront(win) {
   if (!win || win.isDestroyed()) return
   try { win.show() } catch {}
@@ -95,7 +83,6 @@ function bringToFront(win) {
   if (loadWin32()) {
     const h = hwndOf(win)
     if (h) {
-      unlockForeground(h)
       try { setWinPosFn(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) } catch {}
     }
   }
@@ -217,12 +204,12 @@ function notifyOccluded(win) {
   try {
     const n = new Notification({
       title: 'Nixer Browser - Overlay',
-      body: 'El juego esta en pantalla completa exclusiva y el overlay no puede mostrarse encima. Pulsa Ctrl+Shift+O (o el combo del mando) o pon el juego en ventana sin bordes.',
+      body: 'Este juego no permite ventanas encima (pantalla completa exclusiva). Pon el juego en modo ventana sin bordes a la resolucion de tu pantalla y el overlay aparecera encima sin tocar el juego.',
     })
     n.on('click', () => { if (win && !win.isDestroyed()) bringToFront(win) })
     n.show()
   } catch {}
-  if (onToast) onToast('El overlay no se ve: si el juego esta en pantalla completa exclusiva, ponlo en ventana sin bordes', 'info')
+  if (onToast) onToast('Este juego no permite ventanas encima (exclusiva real). Usa el modo sin bordes a tu resolucion nativa', 'info')
 }
 
 function hideOverlay() {

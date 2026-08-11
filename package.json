@@ -48,7 +48,7 @@
     "test:hint": "electron electron/test-hint.js",
     "test:gamepad": "electron electron/test-gamepad.js",
     "test:osk": "electron electron/test-osk.js",
-    "test:overlay": "electron electron/test-overlay.js",
+    "test:overlay": "npm run build && electron electron/test-overlay.js",
     "test:nixer-private": "electron electron/test-nixer-private.js",
     "test:close": "electron electron/test-close.js",
     "test:ui": "electron electron/test-ui.js",

@@ -93,6 +93,22 @@ app.whenReady().then(async () => {
   } : null
   results.overlayFg = await waitFg(6000)
 
+  // Pestañas: barra con al menos 1, y el boton "+" crea una nueva.
+  if (ovOpen) {
+    try {
+      const tabs0 = await ovOpen.webContents.executeJavaScript("document.querySelectorAll('.ov-tab').length")
+      await ovOpen.webContents.executeJavaScript("document.querySelector('.ov-tab-new').click()")
+      await delay(300)
+      const tabs1 = await ovOpen.webContents.executeJavaScript("document.querySelectorAll('.ov-tab').length")
+      const tabCloseOk = await ovOpen.webContents.executeJavaScript(
+        "new Promise(function(res){var b=document.querySelector('.ov-tab-close');if(!b){res(false);return;}b.click();setTimeout(function(){res(document.querySelectorAll('.ov-tab').length===1);},300);})"
+      )
+      results.tabs = { before: tabs0, afterNew: tabs1, closeOk: tabCloseOk }
+    } catch (e) {
+      results.tabs = { error: e && e.message }
+    }
+  }
+
   await delay(600)
   sendCombo(ACCEL)
   results.closedGlobal = await waitHidden(4000)
@@ -106,6 +122,9 @@ app.whenReady().then(async () => {
     && /overlay\.html/.test(results.overlayProps.url || '')
     && results.overlayFg === true
     && results.closedGlobal === true
+    && results.tabs && results.tabs.before >= 1
+    && results.tabs.afterNew === results.tabs.before + 1
+    && results.tabs.closeOk === true
   console.log('RESULT:', ok ? 'OVERLAY_OK' : 'OVERLAY_FAIL')
   overlayMod.shutdown()
   setTimeout(() => app.exit(ok ? 0 : 1), 300)
