@@ -851,6 +851,51 @@ function registerIpc() {
     }
   }
 
+  function isProcessRunning(name) {
+    return new Promise((resolve) => {
+      try {
+        const tl = spawn('tasklist', ['/FI', 'IMAGENAME eq ' + name], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
+        let out = ''
+        tl.stdout && tl.stdout.on('data', (d) => { out += String(d) })
+        tl.on('close', () => {
+          const lines = String(out).split('\n').filter((l) => new RegExp('^' + name.replace('.', '\\.') + '\\s', 'i').test(l))
+          resolve(lines.length > 0)
+        })
+        tl.on('error', () => resolve(false))
+      } catch { resolve(false) }
+    })
+  }
+
+  function killProcess(name) {
+    return new Promise((resolve) => {
+      try {
+        const tk = spawn('taskkill', ['/IM', name, '/F'], { stdio: 'ignore', windowsHide: true })
+        tk.on('close', () => resolve())
+        tk.on('error', () => resolve())
+      } catch { resolve() }
+    })
+  }
+
+  async function ensureNoKeyboardZombies() {
+    if (oskMock) return
+    for (const name of ['osk.exe', 'TabTip.exe']) {
+      if (await isProcessRunning(name)) {
+        await killProcess(name)
+        console.log('[TV] ' + name + ' zombi eliminado')
+      }
+    }
+  }
+
+  function bringKeyboardToFront(pid) {
+    if (oskMock || !pid) return
+    try {
+      spawn('powershell', ['-NoProfile', '-Command', '(New-Object -ComObject WScript.Shell).AppActivate(' + pid + ')'], { stdio: 'ignore', windowsHide: true })
+    } catch {}
+    console.log('[TV] teclado al frente (pid=' + pid + ')')
+  }
+
+  let oskStarting = null
+
   function spawnKeyboard() {
     const sys = process.env.SystemRoot || 'C:\\Windows'
     const candidates = [
@@ -861,20 +906,48 @@ function registerIpc() {
     for (const c of candidates) {
       if (oskMock || fs.existsSync(c.path)) { exe = c; break }
     }
-    if (!exe) return { ok: false, reason: 'missing' }
-    if (oskProc && !oskProc.killed) return { ok: true }
-    try {
-      if (oskMock) { oskProc = { killed: true }; oskStatus(true); console.log('[TV] teclado virtual (mock)'); return { ok: true } }
-      oskProc = spawn(exe.path, [], { stdio: 'ignore', windowsHide: false })
-      oskProc.on('error', () => { oskProc = null })
-      oskProc.on('exit', () => { oskProc = null })
-      oskStatus(true)
-      console.log('[TV] teclado virtual abierto:', exe.name)
-      return { ok: true }
-    } catch {
-      oskProc = null
-      return { ok: false, reason: 'spawn' }
-    }
+    if (!exe) return Promise.resolve({ ok: false, reason: 'missing' })
+    if (oskProc && !oskProc.killed) return Promise.resolve({ ok: true })
+    if (oskStarting) return oskStarting
+    oskStarting = (async () => {
+      try {
+        await ensureNoKeyboardZombies()
+        if (oskMock) {
+          oskProc = { killed: true }
+          oskStatus(true)
+          console.log('[TV] teclado virtual (mock)')
+          return { ok: true }
+        }
+        oskProc = spawn(exe.path, [], { stdio: 'ignore', windowsHide: false })
+        const proc = oskProc
+        proc.on('error', (err) => {
+          console.log('[TV] error al lanzar teclado:', err && err.message)
+          oskProc = null
+        })
+        proc.on('exit', (code, signal) => {
+          console.log('[TV] teclado salió: code=' + code + ' signal=' + signal)
+          oskProc = null
+        })
+        oskStatus(true)
+        console.log('[TV] teclado virtual abierto:', exe.name)
+        setTimeout(() => {
+          if (proc && !proc.killed && proc.exitCode === null) {
+            console.log('[TV] teclado vivo')
+            bringKeyboardToFront(proc.pid)
+          } else {
+            console.log('[TV] teclado murió al instante (código ' + (proc && proc.exitCode) + ')')
+            broadcastToast('El teclado en pantalla no pudo iniciarse (código ' + (proc && proc.exitCode) + ')', 'info')
+          }
+        }, 600)
+        return { ok: true }
+      } catch (err) {
+        console.log('[TV] excepción al lanzar teclado:', err && err.message)
+        return { ok: false, reason: 'spawn' }
+      } finally {
+        oskStarting = null
+      }
+    })()
+    return oskStarting
   }
 
   function closeOsk() {
@@ -888,11 +961,11 @@ function registerIpc() {
 
   ipcMain.handle('osk:open', () => spawnKeyboard())
   ipcMain.on('osk:close', () => closeOsk())
-  ipcMain.on('tv:input-focus', () => {
+  ipcMain.on('tv:input-focus', async () => {
     console.log('[TV] focus en campo editable, tvMode=', store.settings().tvMode)
     if (store.settings().tvMode !== true) return
     clearTimeout(oskBlurTimer)
-    const r = spawnKeyboard()
+    const r = await spawnKeyboard()
     if (!r.ok) broadcastToast('No se pudo abrir el teclado virtual: no hay TabTip.exe ni osk.exe', 'info')
   })
   ipcMain.on('tv:input-blur', () => {
