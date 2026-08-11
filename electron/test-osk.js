@@ -47,6 +47,33 @@ app.whenReady().then(async () => {
   await delay(1800)
   results.autoClose = await ui.executeJavaScript('window.__status')
 
+  store.setSettings({ tvMode: true })
+  results.wvClick = await ui.executeJavaScript(`(async () => {
+    const wv = document.querySelector('webview.active')
+    if (!wv) return 'NO_WEBVIEW'
+    wv.loadURL('data:text/html,<input id="f" style="position:fixed;top:50px;left:50px;width:200px;height:40px">')
+    await new Promise((r) => setTimeout(r, 1500))
+    const pos = await wv.executeJavaScript('(() => { const f = document.getElementById("f"); const r = f.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()')
+    wv.sendInputEvent({ type: 'mouseDown', x: pos.x, y: pos.y, button: 'left', clickCount: 1 })
+    wv.sendInputEvent({ type: 'mouseUp', x: pos.x, y: pos.y, button: 'left', clickCount: 1 })
+    await new Promise((r) => setTimeout(r, 600))
+    const focused = await wv.executeJavaScript('document.activeElement && document.activeElement.id')
+    return { pos, focused }
+  })()`).catch((e) => 'ERR:' + e.message)
+  results.wvStatus = await ui.executeJavaScript('window.__status')
+
+  results.addrFocus = await ui.executeJavaScript(`(async () => {
+    const input = document.querySelector('.address-bar input')
+    if (!input) return 'NO_INPUT'
+    const r = input.getBoundingClientRect()
+    const x = r.left + r.width / 2
+    const y = r.top + r.height / 2
+    window.api.uiPointer({ type: 'down', x, y, button: 'left', count: 1 })
+    window.api.uiPointer({ type: 'up', x, y, button: 'left', count: 1 })
+    await new Promise((r) => setTimeout(r, 400))
+    return document.activeElement === input ? 'FOCUSED' : 'NOT_FOCUSED:' + (document.activeElement && document.activeElement.tagName + '.' + document.activeElement.className)
+  })()`).catch((e) => 'ERR:' + e.message)
+
   console.log('OSK:', JSON.stringify(results))
   const ok = results.oskExists && results.focusChannel && results.blurChannel
     && results.tvFns === 'function/function'
@@ -54,6 +81,8 @@ app.whenReady().then(async () => {
     && results.gateOff === 'none'
     && results.gateOn === 'true'
     && results.autoClose === 'false'
+    && results.wvClick && results.wvClick.focused === 'f' && results.wvStatus === 'true'
+    && results.addrFocus === 'FOCUSED'
   console.log('RESULT:', ok ? 'OSK_OK' : 'OSK_FAIL')
   win.close()
   setTimeout(() => app.exit(ok ? 0 : 1), 300)

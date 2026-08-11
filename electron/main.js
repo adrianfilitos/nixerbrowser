@@ -851,16 +851,25 @@ function registerIpc() {
     }
   }
 
-  function spawnOsk() {
-    const oskPath = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'osk.exe')
-    if (!oskMock && !fs.existsSync(oskPath)) return { ok: false, reason: 'missing' }
+  function spawnKeyboard() {
+    const sys = process.env.SystemRoot || 'C:\\Windows'
+    const candidates = [
+      { name: 'TabTip', path: path.join(sys, 'System32', 'TabTip.exe') },
+      { name: 'osk', path: path.join(sys, 'System32', 'osk.exe') },
+    ]
+    let exe = null
+    for (const c of candidates) {
+      if (oskMock || fs.existsSync(c.path)) { exe = c; break }
+    }
+    if (!exe) return { ok: false, reason: 'missing' }
     if (oskProc && !oskProc.killed) return { ok: true }
     try {
-      if (oskMock) { oskProc = { killed: true }; oskStatus(true); return { ok: true } }
-      oskProc = spawn(oskPath, [], { stdio: 'ignore', windowsHide: false })
+      if (oskMock) { oskProc = { killed: true }; oskStatus(true); console.log('[TV] teclado virtual (mock)'); return { ok: true } }
+      oskProc = spawn(exe.path, [], { stdio: 'ignore', windowsHide: false })
       oskProc.on('error', () => { oskProc = null })
       oskProc.on('exit', () => { oskProc = null })
       oskStatus(true)
+      console.log('[TV] teclado virtual abierto:', exe.name)
       return { ok: true }
     } catch {
       oskProc = null
@@ -877,17 +886,31 @@ function registerIpc() {
     oskStatus(false)
   }
 
-  ipcMain.handle('osk:open', () => spawnOsk())
+  ipcMain.handle('osk:open', () => spawnKeyboard())
   ipcMain.on('osk:close', () => closeOsk())
   ipcMain.on('tv:input-focus', () => {
+    console.log('[TV] focus en campo editable, tvMode=', store.settings().tvMode)
     if (store.settings().tvMode !== true) return
     clearTimeout(oskBlurTimer)
-    const r = spawnOsk()
-    if (!r.ok) broadcastToast('No se pudo abrir el teclado virtual' + (r.reason === 'missing' ? ': osk.exe no existe' : ''), 'info')
+    const r = spawnKeyboard()
+    if (!r.ok) broadcastToast('No se pudo abrir el teclado virtual: no hay TabTip.exe ni osk.exe', 'info')
   })
   ipcMain.on('tv:input-blur', () => {
     clearTimeout(oskBlurTimer)
     oskBlurTimer = setTimeout(() => closeOsk(), 2500)
+  })
+  ipcMain.on('ui-pointer', (e, data) => {
+    const c = ctx.ctxFor(e)
+    const t = ctx.ui(c)
+    if (!t || t.isDestroyed() || !data) return
+    const x = Math.round(data.x || 0)
+    const y = Math.round(data.y || 0)
+    try {
+      if (data.type === 'down') t.sendInputEvent({ type: 'mouseDown', x, y, button: data.button || 'left', clickCount: data.count || 1 })
+      else if (data.type === 'up') t.sendInputEvent({ type: 'mouseUp', x, y, button: data.button || 'left', clickCount: data.count || 1 })
+      else if (data.type === 'move') t.sendInputEvent({ type: 'mouseMove', x, y, movementX: 0, movementY: 0, button: data.button || 'left', buttons: data.buttons || 0 })
+      else if (data.type === 'wheel') t.sendInputEvent({ type: 'mouseWheel', x, y, deltaX: Math.round(data.deltaX || 0), deltaY: Math.round(data.deltaY || 0) })
+    } catch {}
   })
 }
 

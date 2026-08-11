@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('api', {
   oskClose: () => ipcRenderer.send('osk:close'),
   tvInputFocus: () => ipcRenderer.send('tv:input-focus'),
   tvInputBlur: () => ipcRenderer.send('tv:input-blur'),
+  uiPointer: (data) => ipcRenderer.send('ui-pointer', data),
   createWindow: (incognito, url) => ipcRenderer.send('create-window', incognito, url),
   openNewTab: (url) => ipcRenderer.send('create-tab', url),
 

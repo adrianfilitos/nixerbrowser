@@ -900,16 +900,19 @@ export default function App() {
     } catch {}
   }
 
-  function dispatchChromeMouse(type, x, y, opts) {
+  function sendChromeMouse(type, x, y, opts) {
     opts = opts || {}
-    const t = document.elementFromPoint(x, y)
-    if (!t) return
     try {
-      t.dispatchEvent(new MouseEvent(type, {
-        bubbles: true, cancelable: true, view: window, clientX: x, clientY: y,
-        detail: opts.count || 1, button: opts.button === 'right' ? 2 : 0,
-        buttons: type === 'mousemove' ? (opts.buttons || 0) : 1,
-      }))
+      window.api.uiPointer({
+        type,
+        x: Math.round(x),
+        y: Math.round(y),
+        button: opts.button === 'right' ? 'right' : 'left',
+        count: opts.count || 1,
+        buttons: opts.buttons || 0,
+        deltaX: opts.deltaX || 0,
+        deltaY: opts.deltaY || 0,
+      })
     } catch {}
   }
 
@@ -919,23 +922,26 @@ export default function App() {
       sendWebMouse(t.el, t.x, t.y, 'down', { button, count })
       sendWebMouse(t.el, t.x, t.y, 'up', { button, count })
     } else {
-      dispatchChromeMouse('mousedown', x, y, { button, count })
-      dispatchChromeMouse('mouseup', x, y, { button, count })
-      dispatchChromeMouse(count > 1 ? 'dblclick' : 'click', x, y, { button, count })
+      if (count > 1) {
+        sendChromeMouse('down', x, y, { button })
+        sendChromeMouse('up', x, y, { button })
+      }
+      sendChromeMouse('down', x, y, { button, count })
+      sendChromeMouse('up', x, y, { button, count })
     }
   }
 
   function doScroll(dx, dy) {
-    const el = activeEl()
-    if (!el) return
     const c = cursorRef.current
     if (!c) return
-    const r = el.getBoundingClientRect()
-    const x = Math.max(0, Math.min(r.width - 1, c.x - r.left))
-    const y = Math.max(0, Math.min(r.height - 1, c.y - r.top))
-    try {
-      el.sendInputEvent({ type: 'mouseWheel', x: Math.round(x), y: Math.round(y), deltaX: Math.round(dx), deltaY: Math.round(dy) })
-    } catch {}
+    const t = pointerTarget(c.x, c.y)
+    if (t.target === 'webview') {
+      try {
+        t.el.sendInputEvent({ type: 'mouseWheel', x: Math.round(t.x), y: Math.round(t.y), deltaX: Math.round(dx), deltaY: Math.round(dy) })
+      } catch {}
+    } else {
+      sendChromeMouse('wheel', c.x, c.y, { deltaX: dx, deltaY: dy })
+    }
   }
 
   function dragMove(x, y, down) {
@@ -944,8 +950,8 @@ export default function App() {
       if (down) sendWebMouse(t.el, t.x, t.y, 'down', { button: 'left', count: 1 })
       else sendWebMouse(t.el, t.x, t.y, 'up', { button: 'left', count: 1 })
     } else {
-      if (down) dispatchChromeMouse('mousedown', x, y, { button: 'left' })
-      else dispatchChromeMouse('mouseup', x, y, { button: 'left' })
+      if (down) sendChromeMouse('down', x, y, { button: 'left' })
+      else sendChromeMouse('up', x, y, { button: 'left' })
     }
   }
 
@@ -1069,10 +1075,11 @@ export default function App() {
         if (dragRef.current) {
           const t = pointerTarget(ev.x, ev.y)
           if (t.target === 'webview') sendWebMouse(t.el, t.x, t.y, 'move', { buttons: 1 })
-          else dispatchChromeMouse('mousemove', ev.x, ev.y, { buttons: 1 })
+          else sendChromeMouse('move', ev.x, ev.y, { buttons: 1 })
         } else if (tvMode) {
           const t = pointerTarget(ev.x, ev.y)
           if (t.target === 'webview') sendWebMouse(t.el, t.x, t.y, 'move', { buttons: 0 })
+          else sendChromeMouse('move', ev.x, ev.y, { buttons: 0 })
         }
         break
       }
