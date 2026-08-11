@@ -291,6 +291,8 @@
           <div class="card">
             <div class="field"><div class="meta"><div class="label">Modo TV</div><div class="desc">Navegación cómoda con mando: cursor con el stick izquierdo, clicks con A/B/X/Y, scroll, medios y teclado virtual</div></div><div class="control"><label class="switch"><input type="checkbox" id="tvMode" /><span class="track"><span class="thumb"></span></span></label></div></div>
             <div class="field"><div class="meta"><div class="label">Fullscreen al conectar el mando</div><div class="desc">Entrar en pantalla completa automáticamente cuando se conecta un mando en modo TV</div></div><div class="control"><label class="switch"><input type="checkbox" id="tvAutoFullscreen" /><span class="track"><span class="thumb"></span></span></label></div></div>
+            <div class="field"><div class="meta"><div class="label">Teclado en pantalla</div><div class="desc">Integrado: siempre funciona y se controla con el mando · Sistema: usa TabTip/osk de Windows</div></div>
+              <div class="control"><select id="tvKeyboard"><option value="own">Integrado (mando)</option><option value="system">Sistema (TabTip/osk)</option></select></div></div>
           </div>
         </section>
 
@@ -654,6 +656,7 @@
         bind('startMinimized', 'startMinimized')
         bind('tvMode', 'tvMode')
         bind('tvAutoFullscreen', 'tvAutoFullscreen')
+        bind('tvKeyboard', 'tvKeyboard')
         bind('memorySaver', 'memorySaver')
         bind('language', 'language', { label: 'Se aplicará al reiniciar' })
         bind('hardwareAcceleration', 'hardwareAcceleration', { label: 'Se aplicará al reiniciar' })

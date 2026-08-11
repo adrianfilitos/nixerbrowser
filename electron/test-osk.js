@@ -62,6 +62,19 @@ app.whenReady().then(async () => {
   })()`).catch((e) => 'ERR:' + e.message)
   results.wvStatus = await ui.executeJavaScript('window.__status')
 
+  results.kbTyped = await ui.executeJavaScript(`(async () => {
+    const kb = document.querySelector('.tv-keyboard')
+    if (!kb) return 'NO_KEYBOARD'
+    const aKey = Array.from(kb.querySelectorAll('button')).find((b) => b.textContent.trim() === 'a')
+    if (!aKey) return 'NO_KEY'
+    aKey.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    aKey.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
+    aKey.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    await new Promise((r) => setTimeout(r, 300))
+    const wv = document.querySelector('webview.active')
+    return await wv.executeJavaScript('document.activeElement && document.activeElement.value')
+  })()`).catch((e) => 'ERR:' + e.message)
+
   results.addrFocus = await ui.executeJavaScript(`(async () => {
     const input = document.querySelector('.address-bar input')
     if (!input) return 'NO_INPUT'
@@ -83,6 +96,7 @@ app.whenReady().then(async () => {
     && results.autoClose === 'false'
     && results.wvClick && results.wvClick.focused === 'f' && results.wvStatus === 'true'
     && results.addrFocus === 'FOCUSED'
+    && results.kbTyped === 'a'
   console.log('RESULT:', ok ? 'OSK_OK' : 'OSK_FAIL')
   win.close()
   setTimeout(() => app.exit(ok ? 0 : 1), 300)

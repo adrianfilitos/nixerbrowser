@@ -70,6 +70,7 @@ const DEFAULT_SETTINGS = {
   startMinimized: false,
   tvMode: false,
   tvAutoFullscreen: true,
+  tvKeyboard: 'own',
   askDownloadLocation: true,
   showDownloadNotifications: true,
   openFolderWhenDone: false,

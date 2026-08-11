@@ -993,14 +993,26 @@ function registerIpc() {
     oskStatus(false)
   }
 
-  ipcMain.handle('osk:open', () => spawnKeyboard())
+  ipcMain.handle('osk:open', () => {
+    if (store.settings().tvKeyboard === 'system') return spawnKeyboard()
+    oskActive = true
+    oskStatus(true)
+    console.log('[TV] teclado integrado activado')
+    return Promise.resolve({ ok: true })
+  })
   ipcMain.on('osk:close', () => closeOsk())
   ipcMain.on('tv:input-focus', async () => {
     console.log('[TV] focus en campo editable, tvMode=', store.settings().tvMode)
     if (store.settings().tvMode !== true) return
     clearTimeout(oskBlurTimer)
-    const r = await spawnKeyboard()
-    if (!r.ok) broadcastToast('No se pudo abrir el teclado virtual: no hay TabTip.exe ni osk.exe', 'info')
+    if (store.settings().tvKeyboard === 'system') {
+      const r = await spawnKeyboard()
+      if (!r.ok) broadcastToast('No se pudo abrir el teclado virtual: no hay TabTip.exe ni osk.exe', 'info')
+      return
+    }
+    oskActive = true
+    oskStatus(true)
+    console.log('[TV] teclado integrado activado')
   })
   ipcMain.on('tv:input-blur', () => {
     clearTimeout(oskBlurTimer)

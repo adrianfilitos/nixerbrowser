@@ -11,6 +11,7 @@ import TaskManager from './components/TaskManager.jsx'
 import Toasts from './components/Toasts.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import GamepadHud from './components/GamepadHud.jsx'
+import OnScreenKeyboard from './components/OnScreenKeyboard.jsx'
 import { useGamepad, rumble } from './components/useGamepad.js'
 import { I } from './components/icons.jsx'
 
@@ -108,6 +109,8 @@ export default function App() {
   const [hintSel, setHintSel] = useState(0)
   const [hudOpen, setHudOpen] = useState(false)
   const [tvIdle, setTvIdle] = useState(false)
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
+  const kbRef = useRef(null)
 
   function toggleSidebar(tab) {
     setSidebar((cur) => (cur === tab ? null : (tab || 'bookmarks')))
@@ -761,6 +764,7 @@ export default function App() {
   useEffect(() => {
     return window.api.onOskStatus((open) => {
       oskOpenRef.current = !!open
+      setKeyboardOpen(!!open)
     })
   }, [])
 
@@ -959,8 +963,9 @@ export default function App() {
     const el = activeEl()
     if (!el) return
     try {
-      el.sendInputEvent({ type: 'keyDown', keyCode: code })
-      el.sendInputEvent({ type: 'keyUp', keyCode: code })
+      const kc = code.length === 1 && /[a-z]/.test(code) ? code.toUpperCase() : code
+      el.sendInputEvent({ type: 'keyDown', keyCode: kc })
+      el.sendInputEvent({ type: 'keyUp', keyCode: kc })
     } catch {}
   }
 
@@ -1018,6 +1023,59 @@ export default function App() {
     if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA' && !t.isContentEditable)) return
     oskOpenRef.current = false
     window.api.tvInputBlur()
+  }
+
+  const SHIFT_CHARS = new Set('!?@#$%&*()_+=:;"\'<>/\\|{}[]~`'.split(''))
+
+  function typeIntoWebview(key) {
+    const el = activeEl()
+    if (!el) return
+    try {
+      if (key === 'space') {
+        el.sendInputEvent({ type: 'keyDown', keyCode: ' ' })
+        el.sendInputEvent({ type: 'char', keyCode: ' ' })
+        el.sendInputEvent({ type: 'keyUp', keyCode: ' ' })
+      } else if (key === 'enter') {
+        el.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' })
+        el.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' })
+      } else if (key === 'backspace') {
+        el.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' })
+        el.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' })
+      } else if (key.length === 1) {
+        let mods = []
+        let kc = key
+        if (/^[A-ZÑ]$/.test(key)) mods = ['shift']
+        else if (SHIFT_CHARS.has(key)) mods = ['shift']
+        else kc = key.toUpperCase()
+        el.sendInputEvent({ type: 'keyDown', keyCode: kc, modifiers: mods })
+        el.sendInputEvent({ type: 'char', keyCode: key })
+        el.sendInputEvent({ type: 'keyUp', keyCode: kc, modifiers: mods })
+      }
+    } catch {}
+  }
+
+  function typeIntoChrome(el, key) {
+    try {
+      const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
+      const setter = Object.getOwnPropertyDescriptor(proto, 'value').set
+      if (key === 'backspace') {
+        setter.call(el, el.value.slice(0, -1))
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      } else if (key === 'enter') {
+        for (const t of ['keydown', 'keyup']) el.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', bubbles: true, cancelable: true }))
+      } else {
+        setter.call(el, el.value + (key === 'space' ? ' ' : key))
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+    } catch {}
+  }
+
+  function typeKey(key) {
+    const ae = document.activeElement
+    const isChromeField = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)
+    if (isChromeField) typeIntoChrome(ae, key)
+    else typeIntoWebview(key)
+    rumble(20, 0.2, 0.2)
   }
 
   function hintLabels(n) {
@@ -1102,11 +1160,13 @@ export default function App() {
       case 'confirm': {
         if (paletteOpen) { synthKey('Enter'); return }
         if (hintMode) { activateHint(); return }
+        if (keyboardOpen) { if (kbRef.current) kbRef.current.press(); return }
         doPointerClick(c.x, c.y, 'left', 1)
         rumble(25, 0.3, 0.3)
         return
       }
       case 'cancel': {
+        if (keyboardOpen) { toggleOsk(false); return }
         if (hintMode) { exitHints(); return }
         if (paletteOpen) { setPaletteOpen(false); return }
         doPointerClick(c.x, c.y, 'right', 1)
@@ -1126,6 +1186,7 @@ export default function App() {
       case 'navForward': navAction('goForward'); return
       case 'up':
       case 'down': {
+        if (keyboardOpen) { if (kbRef.current) kbRef.current.nav(name === 'down' ? 'down' : 'up'); return }
         if (hintMode) { cycleHint(name === 'down' ? 1 : -1); return }
         if (paletteOpen) { synthKey(name === 'down' ? 'ArrowDown' : 'ArrowUp'); return }
         doScroll(0, name === 'down' ? 120 : -120)
@@ -1133,6 +1194,7 @@ export default function App() {
       }
       case 'left':
       case 'right': {
+        if (keyboardOpen) { if (kbRef.current) kbRef.current.nav(name === 'left' ? 'left' : 'right'); return }
         if (hintMode || paletteOpen) return
         navAction(name === 'left' ? 'goBack' : 'goForward')
         return
@@ -1449,6 +1511,7 @@ export default function App() {
           idle={tvIdle}
         />
       )}
+      {tvMode && keyboardOpen && <OnScreenKeyboard ref={kbRef} onKey={typeKey} />}
     </div>
   )
 
