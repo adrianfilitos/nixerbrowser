@@ -851,17 +851,31 @@ function registerIpc() {
     }
   }
 
-  function isProcessRunning(name) {
+  function findProcessPid(name) {
     return new Promise((resolve) => {
       try {
-        const tl = spawn('tasklist', ['/FI', 'IMAGENAME eq ' + name], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
+        const tl = spawn('tasklist', ['/FI', 'IMAGENAME eq ' + name, '/FO', 'CSV', '/NH'], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
         let out = ''
         tl.stdout && tl.stdout.on('data', (d) => { out += String(d) })
         tl.on('close', () => {
-          const lines = String(out).split('\n').filter((l) => new RegExp('^' + name.replace('.', '\\.') + '\\s', 'i').test(l))
-          resolve(lines.length > 0)
+          const m = /"([^"]+)".*?"(\d+)"/.exec(String(out))
+          resolve(m ? Number(m[2]) : null)
         })
-        tl.on('error', () => resolve(false))
+        tl.on('error', () => resolve(null))
+      } catch { resolve(null) }
+    })
+  }
+
+  function isProcessRunning(name) {
+    return findProcessPid(name).then((pid) => pid !== null)
+  }
+
+  function isElevated() {
+    return new Promise((resolve) => {
+      try {
+        const net = spawn('net', ['session'], { stdio: 'ignore', windowsHide: true })
+        net.on('close', (code) => resolve(code === 0))
+        net.on('error', () => resolve(false))
       } catch { resolve(false) }
     })
   }
@@ -895,6 +909,8 @@ function registerIpc() {
   }
 
   let oskStarting = null
+  let oskActive = false
+  let oskExe = null
 
   function spawnKeyboard() {
     const sys = process.env.SystemRoot || 'C:\\Windows'
@@ -907,38 +923,54 @@ function registerIpc() {
       if (oskMock || fs.existsSync(c.path)) { exe = c; break }
     }
     if (!exe) return Promise.resolve({ ok: false, reason: 'missing' })
-    if (oskProc && !oskProc.killed) return Promise.resolve({ ok: true })
+    if (oskActive) return Promise.resolve({ ok: true })
     if (oskStarting) return oskStarting
     oskStarting = (async () => {
       try {
         await ensureNoKeyboardZombies()
         if (oskMock) {
-          oskProc = { killed: true }
           oskStatus(true)
           console.log('[TV] teclado virtual (mock)')
           return { ok: true }
         }
-        oskProc = spawn(exe.path, [], { stdio: 'ignore', windowsHide: false })
-        const proc = oskProc
-        proc.on('error', (err) => {
+        const elevated = await isElevated()
+        let launched
+        if (elevated) {
+          console.log('[TV] proceso elevado: lanzando con runas /trustlevel:0x20000')
+          launched = spawn('runas', ['/trustlevel:0x20000', exe.path], { stdio: 'ignore', windowsHide: true })
+        } else {
+          launched = spawn(exe.path, [], { stdio: 'ignore', windowsHide: false })
+        }
+        oskProc = launched
+        const viaRunas = elevated
+        launched.on('error', (err) => {
           console.log('[TV] error al lanzar teclado:', err && err.message)
           oskProc = null
         })
-        proc.on('exit', (code, signal) => {
-          console.log('[TV] teclado salió: code=' + code + ' signal=' + signal)
+        launched.on('exit', (code, signal) => {
+          console.log('[TV] proceso lanzador salió: code=' + code + ' signal=' + signal)
           oskProc = null
+          if (!viaRunas) oskActive = false
         })
         oskStatus(true)
-        console.log('[TV] teclado virtual abierto:', exe.name)
-        setTimeout(() => {
-          if (proc && !proc.killed && proc.exitCode === null) {
-            console.log('[TV] teclado vivo')
-            bringKeyboardToFront(proc.pid)
-          } else {
-            console.log('[TV] teclado murió al instante (código ' + (proc && proc.exitCode) + ')')
-            broadcastToast('El teclado en pantalla no pudo iniciarse (código ' + (proc && proc.exitCode) + ')', 'info')
-          }
-        }, 600)
+        oskActive = true
+        console.log('[TV] teclado virtual abierto:', exe.name, elevated ? '(via runas)' : '')
+        const confirmAlive = (pid) => {
+          oskExe = exe.name
+          console.log('[TV] teclado vivo (pid=' + pid + ')')
+          bringKeyboardToFront(pid)
+        }
+        setTimeout(async () => {
+          const pid = await findProcessPid(exe.name)
+          if (pid) { confirmAlive(pid); return }
+          setTimeout(async () => {
+            const pid2 = await findProcessPid(exe.name)
+            if (pid2) { confirmAlive(pid2); return }
+            oskActive = false
+            console.log('[TV] el teclado no aparece tras el lanzamiento')
+            broadcastToast('El teclado en pantalla no pudo iniciarse', 'info')
+          }, 1500)
+        }, 800)
         return { ok: true }
       } catch (err) {
         console.log('[TV] excepción al lanzar teclado:', err && err.message)
@@ -952,9 +984,11 @@ function registerIpc() {
 
   function closeOsk() {
     clearTimeout(oskBlurTimer)
-    if (oskProc && !oskProc.killed) {
-      try { oskProc.kill() } catch {}
-      oskProc = null
+    oskActive = false
+    oskProc = null
+    if (!oskMock && oskExe) {
+      killProcess(oskExe)
+      oskExe = null
     }
     oskStatus(false)
   }
