@@ -27,6 +27,20 @@ function setupAutofill() {
   })
 }
 
+function setupTvKeyboard() {
+  const isEditable = (t) => {
+    if (!t || t === document.body) return false
+    const tag = (t.tagName || '').toUpperCase()
+    return tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable
+  }
+  document.addEventListener('focusin', (e) => {
+    if (isEditable(e.target)) ipcRenderer.send('tv:input-focus')
+  }, true)
+  document.addEventListener('focusout', (e) => {
+    if (isEditable(e.target)) ipcRenderer.send('tv:input-blur')
+  }, true)
+}
+
 function injectContentScripts() {
   if (!window.chrome) window.chrome = {}
   if (!window.chrome.runtime) {
@@ -114,6 +128,7 @@ injectYoutubeAdBlock()
 document.addEventListener('DOMContentLoaded', () => {
   detectLoginSubmit()
   setupAutofill()
+  setupTvKeyboard()
   injectContentScripts()
   injectCosmetic()
 })

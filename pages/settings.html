@@ -286,6 +286,14 @@
           </div>
         </section>
 
+        <section id="s-tv" style="scroll-margin-top:70px">
+          <h2>Mando y modo TV</h2>
+          <div class="card">
+            <div class="field"><div class="meta"><div class="label">Modo TV</div><div class="desc">Navegación cómoda con mando: cursor con el stick izquierdo, clicks con A/B/X/Y, scroll, medios y teclado virtual</div></div><div class="control"><label class="switch"><input type="checkbox" id="tvMode" /><span class="track"><span class="thumb"></span></span></label></div></div>
+            <div class="field"><div class="meta"><div class="label">Fullscreen al conectar el mando</div><div class="desc">Entrar en pantalla completa automáticamente cuando se conecta un mando en modo TV</div></div><div class="control"><label class="switch"><input type="checkbox" id="tvAutoFullscreen" /><span class="track"><span class="thumb"></span></span></label></div></div>
+          </div>
+        </section>
+
         <section id="s-performance" style="scroll-margin-top:70px">
           <h2>Rendimiento</h2>
           <div class="card">
@@ -644,6 +652,8 @@
         bind('launchAtStartup', 'launchAtStartup')
         bind('minimizeToTray', 'minimizeToTray')
         bind('startMinimized', 'startMinimized')
+        bind('tvMode', 'tvMode')
+        bind('tvAutoFullscreen', 'tvAutoFullscreen')
         bind('memorySaver', 'memorySaver')
         bind('language', 'language', { label: 'Se aplicará al reiniciar' })
         bind('hardwareAcceleration', 'hardwareAcceleration', { label: 'Se aplicará al reiniciar' })

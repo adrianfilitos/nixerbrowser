@@ -25,6 +25,8 @@ export default function Toolbar({
   settings,
   onToggleSidebar,
   sidebarActive,
+  tvMode,
+  onToggleTv,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
@@ -126,6 +128,12 @@ export default function Toolbar({
         </span>
       )}
       <browser-action-list className="ext-actions" />
+      <button className={'tool-btn tv-btn' + (tvMode ? ' active' : '')} title={tvMode ? 'Salir del modo TV (mando)' : 'Modo TV: navegar con mando'} onClick={onToggleTv}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="7" width="20" height="13" rx="2" />
+          <path d="M8 2.5L12 6l4-3.5" />
+        </svg>
+      </button>
       {show('showExtensionsButton', true) && <ExtensionsMenu onOpenPage={onOpenPage} />}
       {show('showMenuButton', true) && (
       <div className="menu-wrap" ref={menuRef}>

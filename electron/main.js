@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, session, shell, dialog, webContents, screen, net } = require('electron')
+const { spawn } = require('child_process')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -833,6 +834,60 @@ function registerIpc() {
     if (what.history) store.clearHistory()
     if (what.downloads) { store.clearDownloads(); util.broadcastDownloads() }
     return true
+  })
+  let oskProc = null
+  let oskBlurTimer = null
+  const oskMock = process.env.NIXER_OSK_MOCK === '1'
+
+  function oskStatus(open) {
+    for (const wc of webContents.getAllWebContents()) {
+      if (wc.getType() === 'window') wc.send('osk-status', open)
+    }
+  }
+
+  function broadcastToast(text, kind) {
+    for (const wc of webContents.getAllWebContents()) {
+      if (wc.getType() === 'window') wc.send('ui-action', 'ui-toast', { text, kind: kind || 'info' })
+    }
+  }
+
+  function spawnOsk() {
+    const oskPath = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'osk.exe')
+    if (!oskMock && !fs.existsSync(oskPath)) return { ok: false, reason: 'missing' }
+    if (oskProc && !oskProc.killed) return { ok: true }
+    try {
+      if (oskMock) { oskProc = { killed: true }; oskStatus(true); return { ok: true } }
+      oskProc = spawn(oskPath, [], { stdio: 'ignore', windowsHide: false })
+      oskProc.on('error', () => { oskProc = null })
+      oskProc.on('exit', () => { oskProc = null })
+      oskStatus(true)
+      return { ok: true }
+    } catch {
+      oskProc = null
+      return { ok: false, reason: 'spawn' }
+    }
+  }
+
+  function closeOsk() {
+    clearTimeout(oskBlurTimer)
+    if (oskProc && !oskProc.killed) {
+      try { oskProc.kill() } catch {}
+      oskProc = null
+    }
+    oskStatus(false)
+  }
+
+  ipcMain.handle('osk:open', () => spawnOsk())
+  ipcMain.on('osk:close', () => closeOsk())
+  ipcMain.on('tv:input-focus', () => {
+    if (store.settings().tvMode !== true) return
+    clearTimeout(oskBlurTimer)
+    const r = spawnOsk()
+    if (!r.ok) broadcastToast('No se pudo abrir el teclado virtual' + (r.reason === 'missing' ? ': osk.exe no existe' : ''), 'info')
+  })
+  ipcMain.on('tv:input-blur', () => {
+    clearTimeout(oskBlurTimer)
+    oskBlurTimer = setTimeout(() => closeOsk(), 2500)
   })
 }
 

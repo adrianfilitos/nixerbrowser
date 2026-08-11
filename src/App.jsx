@@ -10,6 +10,8 @@ import SiteInfoPopup from './components/SiteInfoPopup.jsx'
 import TaskManager from './components/TaskManager.jsx'
 import Toasts from './components/Toasts.jsx'
 import Sidebar from './components/Sidebar.jsx'
+import GamepadHud from './components/GamepadHud.jsx'
+import { useGamepad, rumble } from './components/useGamepad.js'
 import { I } from './components/icons.jsx'
 
 const PERM_NAMES = {
@@ -94,6 +96,18 @@ export default function App() {
   const [tabSearchOpen, setTabSearchOpen] = useState(false)
   const [tabSearchQuery, setTabSearchQuery] = useState('')
   const windowIdRef = useRef(0)
+  const cursorRef = useRef({ x: 0, y: 0, visible: false })
+  const dragRef = useRef(false)
+  const oskOpenRef = useRef(false)
+  const autoFsRef = useRef(false)
+  const tvIdleTimerRef = useRef(null)
+  const [gpConnected, setGpConnected] = useState(false)
+  const [gpName, setGpName] = useState('')
+  const [hintMode, setHintMode] = useState(false)
+  const [hints, setHints] = useState([])
+  const [hintSel, setHintSel] = useState(0)
+  const [hudOpen, setHudOpen] = useState(false)
+  const [tvIdle, setTvIdle] = useState(false)
 
   function toggleSidebar(tab) {
     setSidebar((cur) => (cur === tab ? null : (tab || 'bookmarks')))
@@ -117,6 +131,7 @@ export default function App() {
 
   const activeTab = tabs.find((t) => t.active) || null
   const inProgress = downloads.filter((d) => d.state === 'in-progress').length
+  const tvMode = !!(settings && settings.tvMode)
 
   function activeEl() {
     return activeTab ? elsRef.current.get(activeTab.id) : null
@@ -718,6 +733,7 @@ export default function App() {
       root.classList.toggle('compact', !!s.compact)
       root.classList.toggle('reduce-motion', s.reduceMotion === true || s.animations === false)
       root.classList.toggle('high-contrast', !!s.highContrast)
+      root.classList.toggle('tv-mode', !!s.tvMode)
       root.classList.toggle('tabs-bottom', s.tabStripPosition === 'bottom')
       root.classList.toggle('tabs-square', s.tabShape === 'square')
       root.style.setProperty('--ui-font-scale', (s.uiFontScale || 100) / 100)
@@ -731,6 +747,54 @@ export default function App() {
     if (settings && settings.theme === 'system') mq.addEventListener('change', apply)
     return () => mq.removeEventListener('change', apply)
   }, [settings])
+
+  useGamepad({
+    enabled: !!settings && !!settings.tvMode,
+    onEvent: handleGamepadEvent,
+    onConnect: handleGpConnect,
+    onDisconnect: handleGpDisconnect,
+    onNonStandard: () => addToast('Mando en modo DirectInput: los botones pueden estar cambiados. Pulsa el botón de modo del mando (Home/Mode) para activar XInput', 'info'),
+    onActivity: pokeActivity,
+    cursorRef,
+  })
+
+  useEffect(() => {
+    return window.api.onOskStatus((open) => {
+      oskOpenRef.current = !!open
+    })
+  }, [])
+
+  useEffect(() => {
+    if (settings && settings.tvMode && gpConnected && settings.tvAutoFullscreen && !document.fullscreenElement && !autoFsRef.current) {
+      window.api.toggleFullscreen()
+      autoFsRef.current = true
+    }
+  }, [settings ? settings.tvMode : false, gpConnected])
+
+  useEffect(() => {
+    if (!settings || !settings.tvMode) {
+      setTvIdle(false)
+      if (autoFsRef.current && document.fullscreenElement) {
+        autoFsRef.current = false
+        window.api.toggleFullscreen()
+      }
+      return
+    }
+    const wake = () => pokeActivity()
+    window.addEventListener('mousemove', wake)
+    window.addEventListener('keydown', wake)
+    window.addEventListener('wheel', wake)
+    document.addEventListener('focusin', onTvFocusIn, true)
+    document.addEventListener('focusout', onTvFocusOut, true)
+    return () => {
+      window.removeEventListener('mousemove', wake)
+      window.removeEventListener('keydown', wake)
+      window.removeEventListener('wheel', wake)
+      document.removeEventListener('focusin', onTvFocusIn, true)
+      document.removeEventListener('focusout', onTvFocusOut, true)
+      clearTimeout(tvIdleTimerRef.current)
+    }
+  }, [settings ? settings.tvMode : false])
 
   function refreshBookmarks() {
     window.api.getBookmarks().then(setBookmarks)
@@ -796,6 +860,324 @@ export default function App() {
     window.api.toggleMaximize()
   }
 
+  const HINT_COLLECT = `(() => {
+    const els = Array.from(document.querySelectorAll('a[href], button, input, textarea, [role="button"]'))
+    const vw = window.innerWidth, vh = window.innerHeight
+    const out = []
+    for (const el of els) {
+      const r = el.getBoundingClientRect()
+      if (r.width < 4 || r.height < 4) continue
+      if (r.top > vh || r.bottom < 0 || r.left > vw || r.right < 0) continue
+      const cs = getComputedStyle(el)
+      if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) continue
+      out.push({ x: r.left + r.width / 2, y: r.top + r.height / 2 })
+    }
+    return out
+  })()`
+
+  const MEDIA_KEYS = { mediaPlayPause: ' ', mediaSeekBack: 'j', mediaSeekFwd: 'l', mediaVolUp: 'ArrowUp', mediaVolDown: 'ArrowDown' }
+
+  function pointerTarget(x, y) {
+    const el = activeEl()
+    if (el) {
+      try {
+        const r = el.getBoundingClientRect()
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+          return { target: 'webview', el, x: x - r.left, y: y - r.top }
+        }
+      } catch {}
+    }
+    return { target: 'chrome' }
+  }
+
+  function sendWebMouse(el, x, y, action, opts) {
+    opts = opts || {}
+    const pt = { x: Math.round(x), y: Math.round(y) }
+    try {
+      if (action === 'move') el.sendInputEvent({ type: 'mouseMove', ...pt, movementX: 0, movementY: 0, button: opts.button || 'left', buttons: opts.buttons || 0 })
+      else if (action === 'down') el.sendInputEvent({ type: 'mouseDown', ...pt, button: opts.button || 'left', clickCount: opts.count || 1 })
+      else if (action === 'up') el.sendInputEvent({ type: 'mouseUp', ...pt, button: opts.button || 'left', clickCount: opts.count || 1 })
+    } catch {}
+  }
+
+  function dispatchChromeMouse(type, x, y, opts) {
+    opts = opts || {}
+    const t = document.elementFromPoint(x, y)
+    if (!t) return
+    try {
+      t.dispatchEvent(new MouseEvent(type, {
+        bubbles: true, cancelable: true, view: window, clientX: x, clientY: y,
+        detail: opts.count || 1, button: opts.button === 'right' ? 2 : 0,
+        buttons: type === 'mousemove' ? (opts.buttons || 0) : 1,
+      }))
+    } catch {}
+  }
+
+  function doPointerClick(x, y, button, count) {
+    const t = pointerTarget(x, y)
+    if (t.target === 'webview') {
+      sendWebMouse(t.el, t.x, t.y, 'down', { button, count })
+      sendWebMouse(t.el, t.x, t.y, 'up', { button, count })
+    } else {
+      dispatchChromeMouse('mousedown', x, y, { button, count })
+      dispatchChromeMouse('mouseup', x, y, { button, count })
+      dispatchChromeMouse(count > 1 ? 'dblclick' : 'click', x, y, { button, count })
+    }
+  }
+
+  function doScroll(dx, dy) {
+    const el = activeEl()
+    if (!el) return
+    const c = cursorRef.current
+    if (!c) return
+    const r = el.getBoundingClientRect()
+    const x = Math.max(0, Math.min(r.width - 1, c.x - r.left))
+    const y = Math.max(0, Math.min(r.height - 1, c.y - r.top))
+    try {
+      el.sendInputEvent({ type: 'mouseWheel', x: Math.round(x), y: Math.round(y), deltaX: Math.round(dx), deltaY: Math.round(dy) })
+    } catch {}
+  }
+
+  function dragMove(x, y, down) {
+    const t = pointerTarget(x, y)
+    if (t.target === 'webview') {
+      if (down) sendWebMouse(t.el, t.x, t.y, 'down', { button: 'left', count: 1 })
+      else sendWebMouse(t.el, t.x, t.y, 'up', { button: 'left', count: 1 })
+    } else {
+      if (down) dispatchChromeMouse('mousedown', x, y, { button: 'left' })
+      else dispatchChromeMouse('mouseup', x, y, { button: 'left' })
+    }
+  }
+
+  function sendKey(code) {
+    const el = activeEl()
+    if (!el) return
+    try {
+      el.sendInputEvent({ type: 'keyDown', keyCode: code })
+      el.sendInputEvent({ type: 'keyUp', keyCode: code })
+    } catch {}
+  }
+
+  function synthKey(key) {
+    const el = document.activeElement
+    if (!el) return
+    try {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+    } catch {}
+  }
+
+  function zoomStep(dir) {
+    const el = activeEl()
+    if (!el) return
+    try {
+      const z = el.getZoomFactor ? el.getZoomFactor() : 1
+      el.setZoomFactor(Math.min(3, Math.max(0.25, (z || 1) + dir * 0.1)))
+    } catch {}
+  }
+
+  function tabStep(dir) {
+    const list = tabsRef.current
+    if (!list.length) return
+    const idx = list.findIndex((t) => t.active)
+    const t = list[(idx + dir + list.length) % list.length]
+    if (t) activate(t.id)
+  }
+
+  function toggleOsk(open) {
+    if (open) {
+      if (!oskOpenRef.current) {
+        oskOpenRef.current = true
+        window.api.oskOpen().then((res) => {
+          if (res && !res.ok) {
+            oskOpenRef.current = false
+            addToast('No se pudo abrir el teclado virtual' + (res.reason === 'missing' ? ': osk.exe no existe' : ''), 'info')
+          }
+        }).catch(() => { oskOpenRef.current = false })
+      }
+    } else if (oskOpenRef.current) {
+      oskOpenRef.current = false
+      window.api.oskClose()
+    }
+  }
+
+  function onTvFocusIn(e) {
+    const t = e.target
+    if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA' && !t.isContentEditable)) return
+    oskOpenRef.current = true
+    window.api.tvInputFocus()
+  }
+
+  function onTvFocusOut(e) {
+    const t = e.target
+    if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA' && !t.isContentEditable)) return
+    oskOpenRef.current = false
+    window.api.tvInputBlur()
+  }
+
+  function hintLabels(n) {
+    const letters = 'abcdefghijklmnopqrstuvwxyz'
+    const labels = []
+    for (let i = 0; i < n; i++) {
+      let s = ''
+      let v = i
+      do { s = letters[v % 26] + s; v = Math.floor(v / 26) - 1 } while (v >= 0)
+      labels.push(s)
+    }
+    return labels
+  }
+
+  function enterHints() {
+    const el = activeEl()
+    if (!el) return
+    el.executeJavaScript(HINT_COLLECT)
+      .then((points) => {
+        if (!Array.isArray(points) || !points.length) { addToast('No hay enlaces visibles', 'info'); return }
+        const r = el.getBoundingClientRect()
+        const labels = hintLabels(points.length)
+        setHints(points.map((p, i) => ({ label: labels[i], x: r.left + p.x, y: r.top + p.y, xv: p.x, yv: p.y })))
+        setHintSel(0)
+        setHintMode(true)
+        rumble(40, 0.3, 0.3)
+      })
+      .catch(() => {})
+  }
+
+  function exitHints() {
+    setHintMode(false)
+    setHints([])
+  }
+
+  function cycleHint(dir) {
+    setHintSel((s) => (s + dir + hints.length) % hints.length)
+  }
+
+  function activateHint() {
+    const el = activeEl()
+    const h = hints[hintSel]
+    if (!el || !h) { exitHints(); return }
+    sendWebMouse(el, h.xv, h.yv, 'down', { button: 'left', count: 1 })
+    sendWebMouse(el, h.xv, h.yv, 'up', { button: 'left', count: 1 })
+    rumble(30, 0.3, 0.3)
+    exitHints()
+  }
+
+  function handleGamepadEvent(ev) {
+    const c = cursorRef.current
+    if (!c) return
+    switch (ev.type) {
+      case 'pointer': {
+        if (dragRef.current) {
+          const t = pointerTarget(ev.x, ev.y)
+          if (t.target === 'webview') sendWebMouse(t.el, t.x, t.y, 'move', { buttons: 1 })
+          else dispatchChromeMouse('mousemove', ev.x, ev.y, { buttons: 1 })
+        } else if (tvMode) {
+          const t = pointerTarget(ev.x, ev.y)
+          if (t.target === 'webview') sendWebMouse(t.el, t.x, t.y, 'move', { buttons: 0 })
+        }
+        break
+      }
+      case 'scroll':
+        doScroll(ev.dx, ev.dy)
+        break
+      case 'drag':
+        dragRef.current = ev.down
+        dragMove(ev.x, ev.y, ev.down)
+        break
+      case 'action':
+        runGamepadAction(ev.name)
+        break
+    }
+  }
+
+  function runGamepadAction(name) {
+    const c = cursorRef.current
+    switch (name) {
+      case 'confirm': {
+        if (paletteOpen) { synthKey('Enter'); return }
+        if (hintMode) { activateHint(); return }
+        doPointerClick(c.x, c.y, 'left', 1)
+        rumble(25, 0.3, 0.3)
+        return
+      }
+      case 'cancel': {
+        if (hintMode) { exitHints(); return }
+        if (paletteOpen) { setPaletteOpen(false); return }
+        doPointerClick(c.x, c.y, 'right', 1)
+        return
+      }
+      case 'double': {
+        if (hintMode) return
+        doPointerClick(c.x, c.y, 'left', 2)
+        rumble(25, 0.3, 0.3)
+        return
+      }
+      case 'tabNext': tabStep(1); rumble(25, 0.3, 0.3); return
+      case 'tabPrev': tabStep(-1); rumble(25, 0.3, 0.3); return
+      case 'tabNew': addTab(); rumble(40, 0.4, 0.4); return
+      case 'tabClose': if (activeTab) closeTab(activeTab.id); rumble(40, 0.4, 0.4); return
+      case 'navBack': navAction('goBack'); return
+      case 'navForward': navAction('goForward'); return
+      case 'up':
+      case 'down': {
+        if (hintMode) { cycleHint(name === 'down' ? 1 : -1); return }
+        if (paletteOpen) { synthKey(name === 'down' ? 'ArrowDown' : 'ArrowUp'); return }
+        doScroll(0, name === 'down' ? 120 : -120)
+        return
+      }
+      case 'left':
+      case 'right': {
+        if (hintMode || paletteOpen) return
+        navAction(name === 'left' ? 'goBack' : 'goForward')
+        return
+      }
+      case 'palette': setPaletteOpen(true); return
+      case 'hints': if (hintMode) exitHints(); else enterHints(); return
+      case 'hud': setHudOpen((o) => !o); return
+      case 'osk': toggleOsk(!oskOpenRef.current); return
+      case 'zoomIn': zoomStep(1); return
+      case 'zoomOut': zoomStep(-1); return
+      case 'tabRestore': restoreTab(); return
+      default: {
+        const key = MEDIA_KEYS[name]
+        if (key) sendKey(key)
+      }
+    }
+  }
+
+  function handleGpConnect(gp) {
+    setGpConnected(true)
+    setGpName(gp && gp.id ? gp.id : 'Mando')
+    addToast('Mando conectado: ' + (gp && gp.id ? gp.id : ''), 'ok')
+    if (settings && settings.tvMode && settings.tvAutoFullscreen && !document.fullscreenElement) {
+      window.api.toggleFullscreen()
+      autoFsRef.current = true
+    }
+  }
+
+  function handleGpDisconnect() {
+    setGpConnected(false)
+    addToast('Mando desconectado', 'info')
+    exitHints()
+    if (autoFsRef.current && document.fullscreenElement) {
+      autoFsRef.current = false
+      window.api.toggleFullscreen()
+    }
+  }
+
+  function pokeActivity() {
+    if (!tvMode) return
+    setTvIdle(false)
+    clearTimeout(tvIdleTimerRef.current)
+    tvIdleTimerRef.current = setTimeout(() => setTvIdle(true), 4000)
+  }
+
+  function toggleTvMode() {
+    const next = !tvMode
+    window.api.setSetting({ tvMode: next })
+    if (!next) setHudOpen(false)
+    addToast(next ? 'Modo TV: conecta un mando Xbox' : 'Modo TV desactivado', 'info')
+  }
+
   const actions = {
     newTab: () => addTab(),
     newWindow: () => window.api.createWindow && window.api.createWindow(false),
@@ -835,6 +1217,7 @@ export default function App() {
     { icon: I.save, label: 'Guardar página como…', accel: 'Ctrl+S', action: () => window.api.savePage() },
     { icon: I.print, label: 'Imprimir', accel: 'Ctrl+P', action: () => window.api.print() },
     { icon: I.sun, label: 'Cambiar tema', action: actions.theme },
+    { icon: I.tv, label: tvMode ? 'Salir del modo TV' : 'Modo TV (navegar con mando)', action: toggleTvMode },
     { icon: I.back, label: 'Atrás', accel: 'Alt+Izq', action: actions.back },
     { icon: I.forward, label: 'Adelante', accel: 'Alt+Der', action: actions.forward },
     { icon: I.reload, label: 'Recargar', accel: 'Ctrl+R', action: actions.reload },
@@ -851,7 +1234,7 @@ export default function App() {
   ]
 
   return (
-    <div className={'app' + (presentation ? ' presentation' : '')} onDoubleClick={handleDblClick} onWheel={handleWheel}>
+    <div className={'app' + (presentation ? ' presentation' : '') + (tvMode ? ' tv-mode' : '') + (tvMode && tvIdle ? ' tv-idle' : '')} onDoubleClick={handleDblClick} onWheel={handleWheel}>
       <div className="chrome">
         <TabStrip
           tabs={tabs}
@@ -935,6 +1318,8 @@ export default function App() {
           onNewTab={() => addTab()}
           onToggleSidebar={() => toggleSidebar()}
           sidebarActive={!!sidebar}
+          tvMode={tvMode}
+          onToggleTv={toggleTvMode}
         />
       </div>
 
@@ -1045,6 +1430,18 @@ export default function App() {
         />
       )}
       <Toasts toasts={toasts} />
+      {tvMode && (
+        <GamepadHud
+          connected={gpConnected}
+          gpName={gpName}
+          cursorRef={cursorRef}
+          hints={hints}
+          hintSel={hintSel}
+          hintActive={hintMode}
+          hudOpen={hudOpen}
+          idle={tvIdle}
+        />
+      )}
     </div>
   )
 

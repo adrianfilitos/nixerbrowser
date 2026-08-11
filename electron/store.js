@@ -68,6 +68,8 @@ const DEFAULT_SETTINGS = {
   launchAtStartup: false,
   minimizeToTray: false,
   startMinimized: false,
+  tvMode: false,
+  tvAutoFullscreen: true,
   askDownloadLocation: true,
   showDownloadNotifications: true,
   openFolderWhenDone: false,

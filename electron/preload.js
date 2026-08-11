@@ -57,6 +57,10 @@ contextBridge.exposeInMainWorld('api', {
   toggleMaximize: () => ipcRenderer.send('win-toggle-maximize'),
   close: () => ipcRenderer.send('win-close'),
   toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
+  oskOpen: () => ipcRenderer.invoke('osk:open'),
+  oskClose: () => ipcRenderer.send('osk:close'),
+  tvInputFocus: () => ipcRenderer.send('tv:input-focus'),
+  tvInputBlur: () => ipcRenderer.send('tv:input-blur'),
   createWindow: (incognito, url) => ipcRenderer.send('create-window', incognito, url),
   openNewTab: (url) => ipcRenderer.send('create-tab', url),
 
@@ -69,6 +73,11 @@ contextBridge.exposeInMainWorld('api', {
     const l = (_e, d) => cb(d)
     ipcRenderer.on('downloads-updated', l)
     return () => ipcRenderer.removeListener('downloads-updated', l)
+  },
+  onOskStatus: (cb) => {
+    const l = (_e, open) => cb(open)
+    ipcRenderer.on('osk-status', l)
+    return () => ipcRenderer.removeListener('osk-status', l)
   },
   onMaximized: (cb) => {
     const l = (_e, d) => cb(d)

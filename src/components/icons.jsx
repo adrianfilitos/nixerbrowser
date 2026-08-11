@@ -7,8 +7,7 @@ function S({ children, ...p }) {
 }
 
 export const I = {
-  plus: <S><path d="M12 5v14M5 12h14" /></S>,
-  window: <S><rect x="2" y="4" width="20" height="16" rx="2" /><path d="M2 9h20" /></S>,
+  plus: <S><path d="M12 5v14M5 12h14" /></S>,  window: <S><rect x="2" y="4" width="20" height="16" rx="2" /><path d="M2 9h20" /></S>,
   incognito: <S><circle cx="8" cy="13" r="3.5" /><circle cx="16" cy="13" r="3.5" /><path d="M8 16.5L6.5 20M16 16.5L17.5 20M4 13h4M16 13h4" /></S>,
   history: <S><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></S>,
   downloads: <S><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></S>,
@@ -40,4 +39,5 @@ export const I = {
   form: <S><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h4" /></S>,
   volume: <S><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14" /></S>,
   arrow: <S><path d="M9 18l6-6-6-6" /></S>,
+  tv: <S><rect x="2" y="7" width="20" height="13" rx="2" /><path d="M8 2.5L12 6l4-3.5" /></S>,
 }
