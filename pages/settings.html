@@ -306,7 +306,6 @@
               <div class="meta"><div class="desc" id="overlayHotkeyHint" style="color:#e05656;display:none">Atajo no válido: no se guardó (se mantiene el anterior)</div></div></div>
             <div class="field"><div class="meta"><div class="label">Combo del mando</div><div class="desc">Botones para abrir/cerrar el overlay con el gamepad (XInput)</div></div>
               <div class="control"><select id="overlayChord"><option value="startBack">Start + Back</option><option value="lbRbStart">LB + RB + Start</option><option value="off">Desactivado</option></select></div></div>
-            <div class="field"><div class="meta"><div class="label">Gancho de teclado de bajo nivel</div><div class="desc">Captura el atajo incluso si el juego retiene el teclado. Algunos anti-cheat kernel pueden bloquearlo</div></div><div class="control"><label class="switch"><input type="checkbox" id="overlayHookLL" /><span class="track"><span class="thumb"></span></span></label></div></div>
           </div>
         </section>
 
@@ -673,7 +672,6 @@
         bind('tvKeyboard', 'tvKeyboard')
         bind('gameOverlay', 'gameOverlay')
         bind('overlayChord', 'overlayChord')
-        bind('overlayHookLL', 'overlayHookLL')
         var OVERLAY_MODS = /^(commandorcontrol|cmd|command|ctrl|control|shift|alt|option|altgr|super|meta)$/i
         var OVERLAY_KEYS = /^[a-z0-9]$|^(f[1-9]|f1[0-9]|f2[0-4]|enter|return|tab|space|backspace|delete|insert|home|end|pageup|pagedown|escape|esc|up|down|left|right|printscreen|scrolllock|pause|numlock|capslock|comma|period|semicolon|slash|backslash|bracketleft|bracketright|minus|equal)$/i
         function isValidAccelerator(v) {

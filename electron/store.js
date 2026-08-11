@@ -78,7 +78,6 @@ const DEFAULT_SETTINGS = {
   gameOverlay: true,
   overlayHotkey: 'CommandOrControl+Shift+O',
   overlayChord: 'startBack',
-  overlayHookLL: true,
   askDownloadLocation: true,
   showDownloadNotifications: true,
   openFolderWhenDone: false,

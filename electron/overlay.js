@@ -1,4 +1,4 @@
-const { BrowserWindow, globalShortcut, screen } = require('electron')
+const { BrowserWindow, globalShortcut, Notification, screen } = require('electron')
 const path = require('path')
 const { DEV_SERVER_URL } = require('./constants')
 const ctx = require('./ctx')
@@ -6,7 +6,7 @@ const ctx = require('./ctx')
 let overlayWin = null
 let overlayCtx = null
 let prevHwnd = null
-let hotkeyTimer = null
+let lastToggleTs = 0
 
 let koffi = null
 let user32 = null
@@ -14,9 +14,6 @@ let xinput = null
 let getStateFn = null
 let setFgFn = null
 let setWinPosFn = null
-let llHook = null
-let llCallback = null
-let pressedVk = new Set()
 let xinputTimer = null
 let lastChordTs = 0
 
@@ -29,13 +26,6 @@ const SWP_NOMOVE = 0x0002
 const SWP_NOSIZE = 0x0001
 const SWP_NOACTIVATE = 0x0010
 const HWND_TOPMOST = -1
-const WH_KEYBOARD_LL = 13
-const WM_KEYDOWN = 0x0100
-const WM_SYSKEYDOWN = 0x0104
-const WM_KEYUP = 0x0101
-const WM_SYSKEYUP = 0x0105
-
-const VK = { CTRL: 0x11, SHIFT: 0x10, ALT: 0x12, O: 0x4F }
 
 function loadWin32() {
   if (user32) return true
@@ -55,7 +45,6 @@ function loadWin32() {
       dwReserved: 'uint32',
       dwReserved2: 'uint32',
     })
-    koffi.struct('KBDLLHOOKSTRUCT', { vkCode: 'uint32', scanCode: 'uint32', flags: 'uint32', time: 'uint32', dwExtraInfo: 'intptr' })
     getStateFn = xinput.func('int __stdcall XInputGetState(int userIndex, _Out_ XINPUT_STATE *state)')
     setFgFn = user32.func('__stdcall', 'SetForegroundWindow', 'int', [koffi.pointer('void')])
     setWinPosFn = user32.func('__stdcall', 'SetWindowPos', 'int', [koffi.pointer('void'), koffi.pointer('void'), 'int', 'int', 'int', 'int', 'uint32'])
@@ -76,15 +65,37 @@ function hwndOf(win) {
   }
 }
 
+function sameHwnd(a, b) {
+  if (a === b) return true
+  try { return !!a && !!b && koffi.address(a) === koffi.address(b) } catch { return false }
+}
+
+// Desbloquea el "foreground lock" de Windows para poder traer el overlay al
+// primer plano incluso cuando otra app (un juego) tiene el foco. SPI pone el
+// timeout de bloqueo a 0 y el doble toque de Alt es el truco clásico que
+// libera la restricción de SetForegroundWindow.
+function unlockForeground(h) {
+  try {
+    const spi = user32.func('__stdcall', 'SystemParametersInfoW', 'int', ['uint32', 'uint32', koffi.pointer('void'), 'uint32'])
+    spi(0x2001, 0, null, 0)
+  } catch {}
+  try {
+    const kb = user32.func('__stdcall', 'keybd_event', 'void', ['uint8', 'uint8', 'uint32', 'intptr'])
+    kb(0x12, 0, 0, 0)
+    kb(0x12, 0, 2, 0)
+  } catch {}
+  try { setFgFn(h) } catch {}
+}
+
 function bringToFront(win) {
   if (!win || win.isDestroyed()) return
   try { win.show() } catch {}
-  try { win.focus() } catch {}
   try { win.moveTop() } catch {}
+  try { win.focus() } catch {}
   if (loadWin32()) {
     const h = hwndOf(win)
     if (h) {
-      try { setFgFn(h) } catch {}
+      unlockForeground(h)
       try { setWinPosFn(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) } catch {}
     }
   }
@@ -172,12 +183,46 @@ function openOverlay() {
   win.webContents.once('did-finish-load', () => {
     if (!win.isDestroyed()) bringToFront(win)
   })
-  setTimeout(() => {
-    if (!win.isDestroyed() && !win.isVisible() && !win.webContents.isLoading()) {
-      console.log('[OVL] AVISO: overlay no visible tras abrirlo (juego en pantalla completa exclusiva?)')
-      if (onToast) onToast('El overlay no se ve: si el juego está en pantalla completa exclusiva, ponlo en ventana sin bordes', 'info')
+  watchdog(win)
+}
+
+// Comprueba de verdad que el overlay haya conseguido el primer plano
+// (GetForegroundWindow), no solo que esté mapeado (isVisible es true incluso
+// tapado por un juego en fullscreen exclusiva). Si no, reintenta el desbloqueo
+// y al final avisa con una notificación del sistema, que SÍ se ve por encima
+// de los juegos en exclusiva.
+function watchdog(win) {
+  const start = Date.now()
+  const check = () => {
+    if (!win || win.isDestroyed()) return
+    if (loadWin32()) {
+      const h = hwndOf(win)
+      if (h && sameHwnd(fgHwnd(), h)) {
+        if (process.env.DEBUG_OVERLAY === '1') console.log('[OVL] watchdog: overlay al frente')
+        return
+      }
+      if (win.isVisible()) bringToFront(win)
     }
-  }, 1500)
+    if (Date.now() - start > 1800) {
+      console.log('[OVL] AVISO: el overlay no ha conseguido el primer plano (juego en pantalla completa exclusiva?)')
+      notifyOccluded(win)
+      return
+    }
+    setTimeout(check, 300)
+  }
+  setTimeout(check, 300)
+}
+
+function notifyOccluded(win) {
+  try {
+    const n = new Notification({
+      title: 'Nixer Browser - Overlay',
+      body: 'El juego esta en pantalla completa exclusiva y el overlay no puede mostrarse encima. Pulsa Ctrl+Shift+O (o el combo del mando) o pon el juego en ventana sin bordes.',
+    })
+    n.on('click', () => { if (win && !win.isDestroyed()) bringToFront(win) })
+    n.show()
+  } catch {}
+  if (onToast) onToast('El overlay no se ve: si el juego esta en pantalla completa exclusiva, ponlo en ventana sin bordes', 'info')
 }
 
 function hideOverlay() {
@@ -194,77 +239,21 @@ function toggleOverlay() {
   }
 }
 
+// Debounce: evita que la auto-repeticion de tecla (o un doble disparo rapido)
+// abra y cierre el overlay en bucle.
+function handleHotkey() {
+  const now = Date.now()
+  if (now - lastToggleTs < 300) return
+  lastToggleTs = now
+  toggleOverlay()
+}
+
 function fgHwnd() {
   if (!loadWin32()) return null
   try {
     const getFg = user32.func('__stdcall', 'GetForegroundWindow', koffi.pointer('void'), [])
     return getFg()
   } catch { return null }
-}
-
-function accelToVk(accel) {
-  const parts = String(accel || '').split('+').map((s) => s.trim().toLowerCase())
-  const mods = []
-  let key = null
-  for (const p of parts) {
-    if (p === 'commandorcontrol' || p === 'ctrl' || p === 'control') mods.push(VK.CTRL)
-    else if (p === 'shift') mods.push(VK.SHIFT)
-    else if (p === 'alt') mods.push(VK.ALT)
-    else if (/^[a-z0-9]$/.test(p)) key = p.toUpperCase().charCodeAt(0)
-    else return null
-  }
-  if (!key || mods.length === 0) return null
-  return { mods, key }
-}
-
-function installLowLevelHook(accel) {
-  if (llHook) return true
-  if (!loadWin32()) return false
-  const map = accelToVk(accel)
-  if (!map) return false
-  try {
-    const hookProto = koffi.proto('intptr __stdcall HookProc(int nCode, intptr wParam, intptr lParam)')
-    const callNext = user32.func('__stdcall', 'CallNextHookEx', 'intptr', [koffi.pointer('void'), 'int', 'intptr', 'intptr'])
-    llCallback = koffi.register(function (nCode, wParam, lParam) {
-      if (nCode >= 0 && lParam) {
-        try {
-          const kb = koffi.decode(lParam, koffi.pointer('KBDLLHOOKSTRUCT'))
-          const vk = kb && kb.vkCode
-          if (wParam === WM_KEYDOWN || wParam === WM_SYSKEYDOWN) {
-            pressedVk.add(vk)
-            if (vk === map.key && map.mods.every((m) => pressedVk.has(m))) {
-              toggleOverlay()
-            }
-          } else if (wParam === WM_KEYUP || wParam === WM_SYSKEYUP) {
-            pressedVk.delete(vk)
-          }
-        } catch {}
-      }
-      return callNext(llHook, nCode, wParam, lParam)
-    }, koffi.pointer(hookProto))
-    const setHook = user32.func('__stdcall', 'SetWindowsHookExW', koffi.pointer('void'), ['int', koffi.pointer(hookProto), koffi.pointer('void'), 'uint32'])
-    llHook = setHook(WH_KEYBOARD_LL, llCallback, null, 0)
-    console.log('[OVL] hook de teclado LL activo:', !!llHook)
-    return !!llHook
-  } catch (e) {
-    console.log('[OVL] error hook LL:', e && e.message)
-    return false
-  }
-}
-
-function uninstallLowLevelHook() {
-  if (llHook && loadWin32()) {
-    try {
-      const unhook = user32.func('__stdcall', 'UnhookWindowsHookEx', 'int', [koffi.pointer('void')])
-      unhook(llHook)
-    } catch {}
-    llHook = null
-  }
-  if (llCallback) {
-    try { koffi.unregister(llCallback) } catch {}
-    llCallback = null
-  }
-  pressedVk = new Set()
 }
 
 function startXinputPoll() {
@@ -321,25 +310,15 @@ function registerHotkey() {
     if (onToast) onToast('Atajo de teclado no válido: ' + accel, 'info')
     return
   }
-  if (s.overlayHookLL !== false) {
-    if (llHook) return
-    if (installLowLevelHook(accel)) {
-      if (hotkeyActive) {
-        try { globalShortcut.unregister(hotkeyActive) } catch {}
-        hotkeyActive = ''
-      }
-      return
-    }
-  }
   if (hotkeyActive === accel) return
   try { globalShortcut.unregister(hotkeyActive) } catch {}
   hotkeyActive = ''
   try {
-    const ok = globalShortcut.register(accel, () => toggleOverlay())
-    if (ok) { hotkeyActive = accel; console.log('[OVL] hotkey global:', accel) }
-    else console.log('[OVL] no se pudo registrar hotkey:', accel)
+    const ok = globalShortcut.register(accel, () => handleHotkey())
+    if (ok) { hotkeyActive = accel; console.log('[OVL] atajo global activo:', accel) }
+    else console.log('[OVL] no se pudo registrar el atajo global:', accel)
   } catch (e) {
-    console.log('[OVL] error hotkey:', e && e.message)
+    console.log('[OVL] error al registrar el atajo:', e && e.message)
   }
 }
 
@@ -348,8 +327,10 @@ function applySettings() {
   const on = !!s.gameOverlay
   if (!on) {
     stopXinputPoll()
-    if (hotkeyActive) { try { globalShortcut.unregister(hotkeyActive) } catch {}; hotkeyActive = '' }
-    uninstallLowLevelHook()
+    if (hotkeyActive) {
+      try { globalShortcut.unregister(hotkeyActive) } catch {}
+      hotkeyActive = ''
+    }
     return
   }
   const c = s.overlayChord
@@ -369,7 +350,6 @@ function init(deps) {
 
 function shutdown() {
   stopXinputPoll()
-  uninstallLowLevelHook()
   if (hotkeyActive) {
     try { globalShortcut.unregister(hotkeyActive) } catch {}
     hotkeyActive = ''
@@ -383,11 +363,17 @@ function getWindow() {
 }
 
 function getDebug() {
+  let overlayFg = false
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    const h = hwndOf(overlayWin)
+    overlayFg = !!(h && loadWin32() && sameHwnd(fgHwnd(), h))
+  }
   return {
     xinput: !!getStateFn,
-    llHook: !!llHook,
     hotkey: hotkeyActive,
+    hotkeyMode: hotkeyActive ? 'globalShortcut' : 'off',
     overlayOpen: !!(overlayWin && !overlayWin.isDestroyed() && overlayWin.isVisible()),
+    overlayFg,
   }
 }
 
