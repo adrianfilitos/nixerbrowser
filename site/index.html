@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nixer Browser · Navegador de Windows para jugar y navegar sin distracciones</title>
+  <meta name="description" content="Nixer Browser: navegador para Windows con bloqueo de anuncios, privacidad, Modo TV con mando y overlay en juegos. Descárgalo gratis." />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="demo.css" />
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="Nixer Browser">
+        <span class="brand-mark"><svg viewBox="0 0 32 32" width="20" height="20"><rect x="2" y="2" width="28" height="28" rx="8" fill="url(#g)"/><text x="16" y="23" font-size="17" font-weight="800" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif">N</text></svg></span>
+        <span class="brand-name">Nixer <b>Browser</b></span>
+      </a>
+      <nav class="header-nav">
+        <a href="#demo" data-i18n="nav.demo">Demo</a>
+        <a href="#gallery" data-i18n="nav.gallery">Galería</a>
+        <a href="#features" data-i18n="nav.features">Características</a>
+        <a href="#download" data-i18n="nav.download">Descargar</a>
+      </nav>
+      <div class="header-actions">
+        <div class="lang-toggle" role="group" aria-label="Idioma">
+          <button data-lang="es" class="active">ES</button>
+          <button data-lang="en">EN</button>
+        </div>
+        <a class="btn btn-cta btn-sm" href="#download" data-i18n="nav.cta">Descargar</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+
+    <!-- HERO -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <span class="hero-badge" data-i18n="hero.badge">Windows · Gratis · Código abierto</span>
+          <h1 data-i18n="hero.title">Navega. Juega. Sin distracciones.</h1>
+          <p class="hero-sub" data-i18n="hero.sub">Nixer Browser es un navegador para Windows que bloquea anuncios, protege tu privacidad y se queda contigo cuando juegas: Modo TV con mando y un overlay que puedes abrir encima del juego con un atajo.</p>
+          <div class="hero-cta">
+            <a class="btn btn-cta btn-lg" href="#download">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              <span data-i18n="hero.download">Descargar para Windows</span>
+            </a>
+            <a class="btn btn-ghost btn-lg" href="https://github.com/adrianfilitos/nixerbrowser" target="_blank" rel="noopener" data-i18n="hero.gh">Ver en GitHub</a>
+          </div>
+          <p class="hero-meta"><span data-i18n="hero.meta">Instalador NSIS ·</span> v<span id="heroVersion">1.0.0</span></p>
+        </div>
+
+        <div class="hero-visual" aria-hidden="true">
+          <div class="browser-frame">
+            <div class="bf-tabs">
+              <span class="bf-tab active">Inicio</span><span class="bf-tab">Playlist</span><span class="bf-tab">Guías</span>
+              <span class="bf-plus">+</span>
+            </div>
+            <div class="bf-toolbar">
+              <span class="bf-dot">‹</span><span class="bf-dot">›</span><span class="bf-dot">⟳</span>
+              <span class="bf-addr">busca en Nixer…</span>
+              <span class="bf-shield">🛡 <b>24</b></span>
+            </div>
+            <div class="bf-body">
+              <div class="bf-greet">Hola 👋</div>
+              <div class="bf-search">Buscar en la web…</div>
+              <div class="bf-links">
+                <span>▶</span><span>🟣</span><span>📖</span><span>🎮</span><span>🗺️</span><span>📰</span>
+              </div>
+            </div>
+            <div class="bf-glow"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DEMO INTERACTIVA -->
+    <section id="demo" class="section">
+      <div class="container">
+        <div class="section-head">
+          <h2 data-i18n="demo.title">Pruébala sin instalar</h2>
+          <p data-i18n="demo.sub">Una demo interactiva de la interfaz. Crea pestañas, navega, activa el escudo, el Modo TV o el overlay.</p>
+        </div>
+
+        <div class="demo-bar">
+          <button class="demo-chip" data-demo="shield"><span>🛡</span><span data-i18n="demo.chipShield">Escudo</span></button>
+          <button class="demo-chip" data-demo="tv"><span>🎮</span><span data-i18n="demo.chipTv">Modo TV</span></button>
+          <button class="demo-chip" data-demo="incognito"><span>🕶</span><span data-i18n="demo.chipIncognito">Incógnito</span></button>
+          <button class="demo-chip" data-demo="overlay"><span>⊞</span><span data-i18n="demo.chipOverlay">Overlay en juegos</span></button>
+        </div>
+
+        <div id="demoBrowser" class="demo-browser">
+          <div id="demoTabs" class="demo-tabs"></div>
+          <div class="demo-toolbar">
+            <button id="demoBack" class="demo-btn" title="Atrás" disabled>‹</button>
+            <button id="demoFwd" class="demo-btn" title="Adelante" disabled>›</button>
+            <button id="demoReload" class="demo-btn" title="Recargar">⟳</button>
+            <button id="demoShield" class="demo-shield" title="Anuncios bloqueados">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-3.5 8-10V5l-8-3-8 3v7c0 6.5 8 10 8 10z"/></svg>
+              <span id="demoBlocked">0</span>
+            </button>
+            <input id="demoAddress" class="demo-address" autocomplete="off" spellcheck="false" placeholder="Buscar o escribir una dirección…" />
+            <button id="demoIncognito" class="demo-btn" title="Incógnito">🕶</button>
+            <button id="demoTv" class="demo-btn" title="Modo TV">🎮</button>
+            <button id="demoOverlay" class="demo-btn" title="Overlay en juegos">⊞</button>
+          </div>
+          <div id="demoView" class="demo-view"></div>
+          <div id="demoHud" class="demo-hud" hidden>
+            <span class="hud-cursor"></span>
+            <span class="hud-chip">A clic</span><span class="hud-chip">B clic der</span><span class="hud-chip">RB/LB pestañas</span><span class="hud-chip">Start menú</span>
+          </div>
+          <div id="demoOsk" class="demo-osk" hidden></div>
+        </div>
+        <p class="demo-note" data-i18n="demo.note">Demo interactiva con navegación simulada — no carga sitios reales.</p>
+      </div>
+    </section>
+
+    <!-- GALERÍA -->
+    <section id="gallery" class="section section-alt">
+      <div class="container">
+        <div class="section-head">
+          <h2 data-i18n="gallery.title">Hecho para el juego</h2>
+          <p data-i18n="gallery.sub">Un vistazo a las funciones pensadas para tu pantalla y tu mando.</p>
+        </div>
+        <div class="gallery-grid">
+
+          <figure class="gallery-card">
+            <div class="g-scene game-scene">
+              <span class="g-label" data-i18n="gallery.game">Juego a pantalla completa</span>
+              <div class="g-overlay">
+                <div class="g-overlay-tabs"><span>YouTube</span><span class="act">Wiki</span><span>+</span></div>
+                <div class="g-overlay-addr">página de la wiki…</div>
+                <div class="g-overlay-body"><div class="g-wiki">Nixer · enciclopedia libre</div></div>
+              </div>
+            </div>
+            <figcaption data-i18n="gallery.gameCap">Overlay con pestañas abierto encima del juego (atajo Ctrl+Shift+O o combo del mando).</figcaption>
+          </figure>
+
+          <figure class="gallery-card">
+            <div class="g-scene tv-scene">
+              <span class="g-label" data-i18n="gallery.tv">Modo TV</span>
+              <div class="g-web">
+                <div class="g-card">Título del vídeo</div>
+                <div class="g-card g-wide">Progreso de reproducción ▮▮▮▮▯▯▯</div>
+              </div>
+              <div class="g-cursor"></div>
+              <div class="g-hud"><span>A clic</span><span>B clic der</span><span>Start menú</span></div>
+              <div class="g-kb">
+                <span>Q</span><span>W</span><span>E</span><span>R</span><span>T</span><span>Y</span><span>⌫</span>
+                <span>A</span><span>S</span><span>D</span><span>F</span><span>G</span><span>H</span><span>↵</span>
+              </div>
+            </div>
+            <figcaption data-i18n="gallery.tvCap">Modo TV: cursor con el stick, teclado en pantalla y guía de atajos para el mando Xinput.</figcaption>
+          </figure>
+
+          <figure class="gallery-card">
+            <div class="g-scene shield-scene">
+              <div class="g-shield"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-3.5 8-10V5l-8-3-8 3v7c0 6.5 8 10 8 10z"/></svg></div>
+              <div class="g-num">1.284</div>
+              <div class="g-shield-cap" data-i18n="gallery.shieldCap">anuncios y rastreadores bloqueados en esta sesión</div>
+              <div class="g-shield-rows"><span>🛑 rastreador bloqueado</span><span>🛑 pop-up bloqueado</span><span>✅ página segura</span></div>
+            </div>
+            <figcaption data-i18n="gallery.shieldSub">Escudo de privacidad: bloqueo de anuncios, pop-ups, cookies y rastreadores de terceros.</figcaption>
+          </figure>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- CARACTERÍSTICAS -->
+    <section id="features" class="section">
+      <div class="container">
+        <div class="section-head">
+          <h2 data-i18n="features.title">Todo lo que un navegador debería tener</h2>
+          <p data-i18n="features.sub">Construido sobre Chromium con una capa de interfaz en React, sin telemetría de por medio.</p>
+        </div>
+        <div class="features-grid">
+          <article class="feature">
+            <div class="f-icon">🛡</div>
+            <h3 data-i18n="feat.adb">Bloqueo de anuncios</h3>
+            <p data-i18n="feat.adbD">Bloquea anuncios, pop-ups y rastreadores de fábrica, sin extensiones extra.</p>
+          </article>
+          <article class="feature">
+            <div class="f-icon">🔒</div>
+            <h3 data-i18n="feat.priv">Privacidad</h3>
+            <p data-i18n="feat.privD">Cookies y scripts de terceros, DoH, navegación segura y DNT configurables.</p>
+          </article>
+          <article class="feature">
+            <div class="f-icon">🎮</div>
+            <h3 data-i18n="feat.tv">Modo TV</h3>
+            <p data-i18n="feat.tvD">Navega desde el sofá: mando Xinput, cursor con el stick, teclado en pantalla y guía de atajos.</p>
+          </article>
+          <article class="feature">
+            <div class="f-icon">⊞</div>
+            <h3 data-i18n="feat.ovl">Overlay en juegos</h3>
+            <p data-i18n="feat.ovlD">Mini-navegador con pestañas que se abre encima del juego con Ctrl+Shift+O o el combo del mando.</p>
+          </article>
+          <article class="feature">
+            <div class="f-icon">🧩</div>
+            <h3 data-i18n="feat.ext">Extensiones</h3>
+            <p data-i18n="feat.extD">Carga extensiones CRX y scripts de contenido, y gestiona su activación por sitio.</p>
+          </article>
+          <article class="feature">
+            <div class="f-icon">🕶</div>
+            <h3 data-i18n="feat.inc">Incógnito</h3>
+            <p data-i18n="feat.incD">Ventana privada con partición de sesión aislada y sin historial.</p>
+          </article>
+          <article class="feature">
+            <div class="f-icon">🗂</div>
+            <h3 data-i18n="feat.ws">Workspaces y grupos</h3>
+            <p data-i18n="feat.wsD">Espacios de trabajo, grupos de pestañas y búsqueda instantánea de pestañas.</p>
+          </article>
+          <article class="feature">
+            <div class="f-icon">⚡</div>
+            <h3 data-i18n="feat.ia">Comandos e IA</h3>
+            <p data-i18n="feat.iaD">Paleta de comandos con atajos, asistente IA configurable, modo lectura y administrador de tareas.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- DESCARGA -->
+    <section id="download" class="section section-alt">
+      <div class="container">
+        <div class="download-card">
+          <div class="download-copy">
+            <h2 data-i18n="dl.title">Descarga Nixer Browser</h2>
+            <p data-i18n="dl.sub">Instalador para Windows · NSIS. Sin registro, sin telemetría. La versión que aparece es siempre la última publicada.</p>
+            <div class="dl-meta">
+              <span class="dl-badge">v<span id="dlVersion">1.0.0</span></span>
+              <span class="dl-size" id="dlSize">≈ 95 MB</span>
+            </div>
+          </div>
+          <a id="dlButton" class="btn btn-cta btn-lg" href="https://github.com/adrianfilitos/nixerbrowser/releases/latest" target="_blank" rel="noopener">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+            <span data-i18n="dl.btn">Descargar para Windows</span>
+          </a>
+          <a class="dl-alt" href="https://github.com/adrianfilitos/nixerbrowser/releases" target="_blank" rel="noopener" data-i18n="dl.alt">Ver todas las versiones →</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <span class="brand-mark"><svg viewBox="0 0 32 32" width="18" height="18"><rect x="2" y="2" width="28" height="28" rx="8" fill="url(#g)"/><text x="16" y="23" font-size="17" font-weight="800" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif">N</text></svg></span>
+        <span>Nixer Browser</span>
+      </div>
+      <nav class="footer-nav">
+        <a href="https://github.com/adrianfilitos/nixerbrowser" target="_blank" rel="noopener" data-i18n="footer.gh">GitHub</a>
+        <a href="https://github.com/adrianfilitos/nixerbrowser/releases" target="_blank" rel="noopener" data-i18n="footer.releases">Releases</a>
+      </nav>
+      <p class="footer-copy">© <span id="year">2026</span> Nixer Browser · <span data-i18n="footer.copy">Hecho con cariño para Windows</span></p>
+    </div>
+  </footer>
+
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#6c7bff"/><stop offset="1" stop-color="#8b5cf6"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <script src="app.js"></script>
+  <script src="demo.js"></script>
+</body>
+</html>
