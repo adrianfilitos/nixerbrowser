@@ -28,6 +28,9 @@ app.whenReady().then(async () => {
   results.openResult = await ui.executeJavaScript('window.api.oskOpen()').catch((e) => 'ERR:' + e.message)
 
   await ui.executeJavaScript(`window.__status = 'none'; window.api.onOskStatus((open) => { window.__status = String(open) }); 'subscribed'`)
+  await delay(300)
+  await ui.executeJavaScript(`window.__status = 'none'`)
+  results.gateCtx = { tv: store.settings().tvMode, ov: store.settings().gameOverlay }
 
   store.setSettings({ tvMode: false })
   ipcMain.emit('tv:input-focus', {})
@@ -36,6 +39,7 @@ app.whenReady().then(async () => {
 
   store.setSettings({ tvMode: true })
   results.tvModeValue = store.settings().tvMode
+  require('./util').broadcastSettings()
   ipcMain.emit('tv:input-focus', {})
   await delay(300)
   results.gateOn = await ui.executeJavaScript('window.__status')
@@ -48,6 +52,8 @@ app.whenReady().then(async () => {
   results.autoClose = await ui.executeJavaScript('window.__status')
 
   store.setSettings({ tvMode: true })
+  require('./util').broadcastSettings()
+  await delay(300)
   results.wvClick = await ui.executeJavaScript(`(async () => {
     const wv = document.querySelector('webview.active')
     if (!wv) return 'NO_WEBVIEW'

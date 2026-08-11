@@ -12,6 +12,7 @@ import Toasts from './components/Toasts.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import GamepadHud from './components/GamepadHud.jsx'
 import OnScreenKeyboard from './components/OnScreenKeyboard.jsx'
+import { typeIntoChrome, typeIntoWebview } from './components/tvTyping.js'
 import { useGamepad, rumble } from './components/useGamepad.js'
 import { I } from './components/icons.jsx'
 
@@ -1027,54 +1028,11 @@ export default function App() {
 
   const SHIFT_CHARS = new Set('!?@#$%&*()_+=:;"\'<>/\\|{}[]~`'.split(''))
 
-  function typeIntoWebview(key) {
-    const el = activeEl()
-    if (!el) return
-    try {
-      if (key === 'space') {
-        el.sendInputEvent({ type: 'keyDown', keyCode: ' ' })
-        el.sendInputEvent({ type: 'char', keyCode: ' ' })
-        el.sendInputEvent({ type: 'keyUp', keyCode: ' ' })
-      } else if (key === 'enter') {
-        el.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' })
-        el.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' })
-      } else if (key === 'backspace') {
-        el.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' })
-        el.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' })
-      } else if (key.length === 1) {
-        let mods = []
-        let kc = key
-        if (/^[A-ZÑ]$/.test(key)) mods = ['shift']
-        else if (SHIFT_CHARS.has(key)) mods = ['shift']
-        else kc = key.toUpperCase()
-        el.sendInputEvent({ type: 'keyDown', keyCode: kc, modifiers: mods })
-        el.sendInputEvent({ type: 'char', keyCode: key })
-        el.sendInputEvent({ type: 'keyUp', keyCode: kc, modifiers: mods })
-      }
-    } catch {}
-  }
-
-  function typeIntoChrome(el, key) {
-    try {
-      const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
-      const setter = Object.getOwnPropertyDescriptor(proto, 'value').set
-      if (key === 'backspace') {
-        setter.call(el, el.value.slice(0, -1))
-        el.dispatchEvent(new Event('input', { bubbles: true }))
-      } else if (key === 'enter') {
-        for (const t of ['keydown', 'keyup']) el.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', bubbles: true, cancelable: true }))
-      } else {
-        setter.call(el, el.value + (key === 'space' ? ' ' : key))
-        el.dispatchEvent(new Event('input', { bubbles: true }))
-      }
-    } catch {}
-  }
-
   function typeKey(key) {
     const ae = document.activeElement
     const isChromeField = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)
     if (isChromeField) typeIntoChrome(ae, key)
-    else typeIntoWebview(key)
+    else typeIntoWebview(activeEl(), key)
     rumble(20, 0.2, 0.2)
   }
 
@@ -1287,6 +1245,7 @@ export default function App() {
     { icon: I.print, label: 'Imprimir', accel: 'Ctrl+P', action: () => window.api.print() },
     { icon: I.sun, label: 'Cambiar tema', action: actions.theme },
     { icon: I.tv, label: tvMode ? 'Salir del modo TV' : 'Modo TV (navegar con mando)', action: toggleTvMode },
+    { icon: I.window, label: 'Abrir overlay en juegos', accel: 'Ctrl+Shift+O', action: () => window.api.overlayToggle() },
     { icon: I.back, label: 'Atrás', accel: 'Alt+Izq', action: actions.back },
     { icon: I.forward, label: 'Adelante', accel: 'Alt+Der', action: actions.forward },
     { icon: I.reload, label: 'Recargar', accel: 'Ctrl+R', action: actions.reload },

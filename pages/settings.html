@@ -296,6 +296,17 @@
           </div>
         </section>
 
+        <section id="s-overlay" style="scroll-margin-top:70px">
+          <h2>Overlay en juegos</h2>
+          <div class="card">
+            <div class="field"><div class="meta"><div class="label">Overlay de navegador en juegos</div><div class="desc">Mini navegador siempre al frente sobre el juego; se abre con el atajo o con el combo del mando (funciona con juegos en ventana o pantalla completa sin bordes)</div></div><div class="control"><label class="switch"><input type="checkbox" id="gameOverlay" /><span class="track"><span class="thumb"></span></span></label></div></div>
+            <div class="field"><div class="meta"><div class="label">Atajo de teclado</div><div class="desc">Formato Electron, p.ej. CommandOrControl+Shift+O</div></div><div class="control"><input type="text" id="overlayHotkey" /></div></div>
+            <div class="field"><div class="meta"><div class="label">Combo del mando</div><div class="desc">Botones para abrir/cerrar el overlay con el gamepad (XInput)</div></div>
+              <div class="control"><select id="overlayChord"><option value="startBack">Start + Back</option><option value="lbRbStart">LB + RB + Start</option><option value="off">Desactivado</option></select></div></div>
+            <div class="field"><div class="meta"><div class="label">Gancho de teclado de bajo nivel</div><div class="desc">Captura el atajo incluso si el juego retiene el teclado. Algunos anti-cheat kernel pueden bloquearlo</div></div><div class="control"><label class="switch"><input type="checkbox" id="overlayHookLL" /><span class="track"><span class="thumb"></span></span></label></div></div>
+          </div>
+        </section>
+
         <section id="s-performance" style="scroll-margin-top:70px">
           <h2>Rendimiento</h2>
           <div class="card">
@@ -657,6 +668,10 @@
         bind('tvMode', 'tvMode')
         bind('tvAutoFullscreen', 'tvAutoFullscreen')
         bind('tvKeyboard', 'tvKeyboard')
+        bind('gameOverlay', 'gameOverlay')
+        bind('overlayHotkey', 'overlayHotkey')
+        bind('overlayChord', 'overlayChord')
+        bind('overlayHookLL', 'overlayHookLL')
         bind('memorySaver', 'memorySaver')
         bind('language', 'language', { label: 'Se aplicará al reiniciar' })
         bind('hardwareAcceleration', 'hardwareAcceleration', { label: 'Se aplicará al reiniciar' })

@@ -3,6 +3,10 @@ const fs = require('fs')
 const path = require('path')
 const dbmod = require('./db')
 
+if (process.env.NIXER_USER_DATA) {
+  try { app.setPath('userData', process.env.NIXER_USER_DATA) } catch {}
+}
+
 const BUILTIN_ENGINES = [
   { id: 'google', name: 'Google', tpl: 'https://www.google.com/search?q={q}' },
   { id: 'brave', name: 'Brave', tpl: 'https://search.brave.com/search?q={q}' },
@@ -71,6 +75,10 @@ const DEFAULT_SETTINGS = {
   tvMode: false,
   tvAutoFullscreen: true,
   tvKeyboard: 'own',
+  gameOverlay: false,
+  overlayHotkey: 'CommandOrControl+Shift+O',
+  overlayChord: 'startBack',
+  overlayHookLL: true,
   askDownloadLocation: true,
   showDownloadNotifications: true,
   openFolderWhenDone: false,

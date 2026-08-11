@@ -36,6 +36,7 @@ const menus = require('./menu')
 const pageStyle = require('./page-style')
 const sqlite = require('./sqlite')
 const translate = require('./translate')
+const overlayMod = require('./overlay')
 
 let dragState = null
 let dragTarget = null // { wc, winCtx, attached, entered }
@@ -257,6 +258,12 @@ function createWindow({ incognito = false, x, y } = {}) {
     }
   })
   return wctx
+}
+
+function broadcastToast(text, kind) {
+  for (const wc of webContents.getAllWebContents()) {
+    if (wc.getType() === 'window') wc.send('ui-action', 'ui-toast', { text, kind: kind || 'info' })
+  }
 }
 
 function registerIpc() {
@@ -759,6 +766,7 @@ function registerIpc() {
       try { session.defaultSession.setDownloadPath(patch.downloadPath || app.getPath('downloads')) } catch {}
     }
     util.broadcastSettings()
+    overlayMod.applySettings()
   })
   ipcMain.handle('search:engines', () => ({ engines: store.engines(), defaultId: store.settings().defaultSearchEngine }))
   ipcMain.handle('search:url', (_e, q) => store.searchUrl(q))
@@ -842,12 +850,6 @@ function registerIpc() {
   function oskStatus(open) {
     for (const wc of webContents.getAllWebContents()) {
       if (wc.getType() === 'window') wc.send('osk-status', open)
-    }
-  }
-
-  function broadcastToast(text, kind) {
-    for (const wc of webContents.getAllWebContents()) {
-      if (wc.getType() === 'window') wc.send('ui-action', 'ui-toast', { text, kind: kind || 'info' })
     }
   }
 
@@ -1003,7 +1005,7 @@ function registerIpc() {
   ipcMain.on('osk:close', () => closeOsk())
   ipcMain.on('tv:input-focus', async () => {
     console.log('[TV] focus en campo editable, tvMode=', store.settings().tvMode)
-    if (store.settings().tvMode !== true) return
+    if (store.settings().tvMode !== true && store.settings().gameOverlay !== true) return
     clearTimeout(oskBlurTimer)
     if (store.settings().tvKeyboard === 'system') {
       const r = await spawnKeyboard()
@@ -1031,6 +1033,7 @@ function registerIpc() {
       else if (data.type === 'wheel') t.sendInputEvent({ type: 'mouseWheel', x, y, deltaX: Math.round(data.deltaX || 0), deltaY: Math.round(data.deltaY || 0) })
     } catch {}
   })
+  ipcMain.on('overlay:toggle', () => overlayMod.toggleOverlay())
 }
 
 const { buildMenu, showContentMenu } = menus.createMenus({
@@ -1149,6 +1152,8 @@ app.whenReady().then(() => {
   nixer.install([session.defaultSession, session.fromPartition(PRIVATE_PARTITION)])
   extensions.rehydrateExtensions()
   createWindow()
+  overlayMod.init({ onToast: broadcastToast, getSettings: () => store.settings() })
+  overlayMod.applySettings()
   if (process.env.SMOKE === '1') runSmoke()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -1252,7 +1257,12 @@ async function runSmoke() {
   app.exit(ok ? 0 : 1)
 }
 
+app.on('before-quit', () => {
+  global.__nixerQuitting = true
+})
+
 app.on('will-quit', () => {
+  overlayMod.shutdown()
   if (store.settings().clearDataOnExit === true) {
     try { session.defaultSession.clearCache() } catch {}
     try { session.defaultSession.clearStorageData() } catch {}
