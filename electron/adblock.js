@@ -17,25 +17,28 @@ const AD_PATTERNS = [
   'quantserve', 'scorecardresearch', 'adform.', 'adroll', 'amazon-adsystem', 'safeframe',
   '/adclick', '/sponsored', 'advertising.', 'yieldmo', 'zedo.', 'demdex', 'rlcdn', 'tapad.',
   'bluekai', 'exelator', 'contextweb', 'sharethrough', 'spotxchange', 'gumgum', '33across',
-  'bidswitch', 'tribalfusion', '/banner', '/advert', 'ad-serve', 'ads-', 'adtech', 'undertone',
+  'bidswitch', 'tribalfusion', '/advert', 'ad-serve', 'adtech', 'undertone',
   'yieldlab', 'medianet', 'trackad', 'adx-', '/aniview', 'adpushup', 'anyclip', 'adthrive',
   'mediavine', 'ezoic', 'tapresearch', 'prebid', 'pubnative', 'rtbhouse', 'smadex', 'sovrn',
   'indexexchange', 'lijit', 'zemanta', 'improvedigital', 'rhythmone', 'conversantmedia',
   'beachfront', 'emxdgt', 'triplelift', 'ucfunnel', 'verizonmedia', 'yieldbird', 'kixer',
   'media.net', 'nudatasecurity', 'pavlovads', 'plista', 'stackadapt', 'startappservice',
   'sulvo', 'unrulymedia', 'videoamp', 'usemax', 'brightcom', 'onetag', 'orcasrv', 'tidaltv',
-  'adserv.', 'adserver', 'adv.', 'ads.', '/ads?', 'pixel.ads', 'adserving',
+  'adserv.', 'adserver', 'adv.', 'pixel.ads', 'adserving',
 ]
 
-// Patrones de rastreo / telemetría / analítica
+// Patrones de rastreo / telemetría / analítica.
+// Solo tokens específicos de redes conocidas: los substrings genéricos de ruta
+// (/track, /event, /beacon, /collect…) rompían APIs y logins legítimos.
 const TRACKER_PATTERNS = [
-  '/collect', '/telemetry', '/metrics', '/beacon', '/pixel', '/track', '/tracking', '/event',
-  '/pageview', '/analytics', 'analytics.', '-analytics', 'tracking.', 'statcounter',
-  'hotjar', 'optimizely', 'mouseflow', 'fullstory', 'clarity.ms', 'segment.io', 'amplitude',
-  'mixpanel', 'matomo', 'piwik', 'bugsnag', 'sentry.io', 'newrelic', 'appdynamics',
-  'facebook.com/tr', 'connect.facebook.net', 'static.ads-twitter.com', 'analytics.twitter.com',
-  'ads-twitter.com', 'app-measurement.com', 'firebase', 'crashlytics', 'doubleclick.net/pagead',
-  'gtm.js', 'gtag/js', 'google-analytics.com/analytics.js', 'googletagmanager.com/gtm',
+  '/pageview',
+  'statcounter', 'hotjar', 'optimizely', 'mouseflow', 'fullstory', 'clarity.ms',
+  'segment.io', 'amplitude', 'mixpanel', 'matomo', 'piwik', 'bugsnag', 'sentry.io',
+  'newrelic', 'appdynamics',
+  'facebook.com/tr', 'connect.facebook.net', 'static.ads-twitter.com',
+  'analytics.twitter.com', 'ads-twitter.com', 'app-measurement.com',
+  'crashlytics', 'doubleclick.net/pagead', 'gtm.js', 'gtag/js',
+  'google-analytics.com/analytics.js', 'googletagmanager.com/gtm',
   'googletagmanager.com/gtag', 'google-analytics.com/collect', '/o/ads',
 ]
 
@@ -309,7 +312,7 @@ function init(sessionRef, getState) {
       }
 
       // 2) Patrones de rastreo en subrecursos
-      if (st.blockAds && type !== 'main_frame' && BLOCK_TYPES.has(type) && urlMatches(TRACKER_PATTERNS, details.url)) {
+      if ((st.blockAds || st.blockTrackers) && type !== 'main_frame' && BLOCK_TYPES.has(type) && urlMatches(TRACKER_PATTERNS, details.url)) {
         bump(pageOrigin, 'trackers')
         logBlock(details.url, 'rastreador', pageOrigin)
         return callback({ cancel: true })

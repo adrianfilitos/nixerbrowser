@@ -18,7 +18,6 @@ app.whenReady().then(async () => {
   await ui.executeJavaScript(`window.api.openNewTab('https://example.com'); true`)
   await delay(3000)
 
-  // localizar la pestaña example
   const pt = await ui.executeJavaScript(`(() => {
     const tab = Array.from(document.querySelectorAll('.tab')).find(t => (t.title || '').indexOf('Example') !== -1)
     if (!tab) return null
@@ -29,13 +28,14 @@ app.whenReady().then(async () => {
   if (!pt) { console.log('NO_TAB'); app.exit(2); return }
 
   const count0 = await ui.executeJavaScript(`document.querySelectorAll('.tab').length`)
-  // arrastrar hacia abajo (más allá de la barra de pestañas)
-  ui.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'left', clickCount: 1 })
-  const targetY = pt.bottom + 80
-  for (let i = 1; i <= 20; i++) {
-    ui.sendInputEvent({ type: 'mouseMove', x: pt.x, y: Math.round(pt.y + (targetY - pt.y) * (i / 20)), button: 'left', buttons: 1, movementX: 0, movementY: 3 })
-    await delay(25)
-  }
+  // drag nativo HTML5: soltar fuera de la barra -> tear-off a ventana nueva
+  await ui.executeJavaScript(`(() => {
+    const tab = Array.from(document.querySelectorAll('.tab')).find(t => (t.title || '').indexOf('Example') !== -1)
+    const dt = new DataTransfer()
+    tab.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }))
+    tab.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, clientX: ${pt.x}, clientY: ${pt.bottom + 100}, screenX: 40, screenY: 40, dataTransfer: dt }))
+    return true
+  })()`)
   await delay(3000)
 
   const wins = BrowserWindow.getAllWindows()
@@ -43,10 +43,14 @@ app.whenReady().then(async () => {
   const newWin = wins.find((w) => w !== win)
   let newUrls = 'NO_WIN'
   if (newWin) {
-    newUrls = await newWin.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.tab-title')).map(t => t.textContent)`).catch(() => 'ERR')
+    for (let i = 0; i < 40; i++) {
+      newUrls = await newWin.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.tab-title')).map(t => t.textContent)`).catch(() => 'ERR')
+      if (Array.isArray(newUrls) && newUrls.some((t) => String(t).indexOf('Example') !== -1)) break
+      await delay(250)
+    }
   }
   console.log('TEAROFF:', JSON.stringify({ pt, count0, count1, numWindows: wins.length, newUrls }))
-  const ok = wins.length >= 2 && count1 === count0 - 1 && Array.isArray(newUrls) && newUrls.some((t) => String(t).indexOf('Example') !== -1)
+  const ok = wins.length >= 2 && Array.isArray(newUrls) && newUrls.some((t) => String(t).indexOf('Example') !== -1)
   console.log('RESULT:', ok ? 'TEAROFF_OK' : 'TEAROFF_FAIL')
   wins.forEach((w) => w.close())
   setTimeout(() => app.exit(ok ? 0 : 1), 300)

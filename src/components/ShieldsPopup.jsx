@@ -42,7 +42,7 @@ export default function ShieldsPopup({ origin, anchor, onClose }) {
       </div>
       <div className="shields-row">
         <div><b>Rastreadores</b><div className="popup-sub">Bloqueados: {s.trackers || 0}</div></div>
-        <Switch on={s.blockAds} onChange={(v) => toggle('blockAds', v)} />
+        <Switch on={s.blockTrackers} onChange={(v) => toggle('blockTrackers', v)} />
       </div>
       <div className="shields-row">
         <div><b>Scripts</b><div className="popup-sub">Bloqueados: {s.scripts}</div></div>

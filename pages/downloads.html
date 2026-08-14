@@ -17,6 +17,8 @@
       main { max-width:860px; margin:0 auto; padding:16px 24px; }
       .row { display:flex; align-items:center; gap:14px; padding:12px; border-radius:10px; }
       .row:hover { background:var(--bg3); }
+      .thumb { width:44px; height:44px; flex-shrink:0; border-radius:8px; background:var(--bg3); display:flex; align-items:center; justify-content:center; color:var(--dim); overflow:hidden; }
+      .thumb img { width:100%; height:100%; object-fit:cover; }
       .name { flex:1; min-width:0; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       .state { flex-shrink:0; font-size:12px; }
       .state.in-progress { color:var(--accent); }
@@ -33,7 +35,7 @@
   <body>
     <header>
       <h1>Descargas</h1>
-      <button id="clear" class="danger">Limpiar completadas</button>
+      <button id="clear" class="danger">Limpiar</button>
     </header>
     <main id="list"></main>
     <script>
@@ -59,13 +61,21 @@
             row.className = 'row'
             var pct = d.total > 0 ? Math.round((d.received / d.total) * 100) : 0
             row.innerHTML =
+              '<span class="thumb"></span>' +
               '<span class="name"></span>' +
               '<span class="state ' + d.state + '"></span>' +
               '<div class="bar"><div style="width:' + (d.state === 'completed' ? 100 : pct) + '%"></div></div>' +
               '<span class="actions">' +
-              (d.state === 'in-progress' ? '<button class="link cancel">Cancelar</button>' : '<button class="link open">Abrir</button><button class="link show">Mostrar</button><button class="link folder">Carpeta</button><button class="link copy">Copiar</button>') +
+              (d.state === 'in-progress' ? '<button class="link cancel">Cancelar</button>' : '<button class="link open">Abrir</button><button class="link show">Mostrar</button><button class="link folder">Carpeta</button><button class="link copy">Copiar</button><button class="link del">Eliminar</button>') +
               '</span>'
             row.querySelector('.name').textContent = d.name
+            var thumb = row.querySelector('.thumb')
+            var ext = (d.name || '').split('.').pop().toLowerCase()
+            var isImg = d.path && ['jpg','jpeg','png','gif','webp','bmp','svg','ico'].indexOf(ext) !== -1
+            thumb.innerHTML = isImg ? '<span style="opacity:0.4">&#8984;</span>' : '<span style="font-size:18px">&#128196;</span>'
+            if (isImg) {
+              browserAPI.downloads.preview(d.path).then(function (data) { if (data) thumb.innerHTML = '<img src="' + data + '" alt="" />' })
+            }
             row.querySelector('.state').textContent =
               d.state === 'in-progress' ? pct + '%' : d.state === 'completed' ? 'Completado' : 'Cancelado'
             var cancel = row.querySelector('.cancel')
@@ -85,6 +95,8 @@
               try { document.execCommand('copy') } catch {}
               document.body.removeChild(ta)
             }
+            var del = row.querySelector('.del')
+            if (del) del.onclick = async function () { await browserAPI.downloads.remove(d.id); render() }
             list.appendChild(row)
           })
         })

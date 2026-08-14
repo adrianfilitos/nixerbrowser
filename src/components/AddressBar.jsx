@@ -39,7 +39,6 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
   const [engOpen, setEngOpen] = useState(false)
   const [focused, setFocused] = useState(false)
   const inputRef = useRef(null)
-  const aiInputRef = useRef(null)
   const timerRef = useRef(null)
   const threadRef = useRef([])
   const aiBusyRef = useRef(false)
@@ -54,8 +53,10 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
   }, [])
 
   useEffect(() => {
-    onOverlayChange(aiMode || engOpen || (open && suggestions.length > 0))
+    onOverlayChange('addr', aiMode || engOpen || (open && suggestions.length > 0))
   }, [aiMode, engOpen, open, suggestions, onOverlayChange])
+
+  useEffect(() => () => onOverlayChange('addr', false), [])
 
   useEffect(() => {
     if (document.activeElement !== inputRef.current) setValue(url)
@@ -63,6 +64,61 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
     setSuggestions([])
     setSelected(-1)
   }, [url])
+
+  // Autocompletado como ventana nativa bajo el input (el input conserva el foco).
+  useEffect(() => {
+    if (open && suggestions.length > 0 && !aiMode) {
+      const r = (inputRef.current || {}).getBoundingClientRect ? inputRef.current.getBoundingClientRect() : null
+      const items = suggestions.map((s) => ({ title: s.title || '', url: s.url || '', type: s.type }))
+      const payload = { type: 'autocomplete', items, query: value, selected }
+      if (window.__autoOpen) { if (window.api.updatePopup) window.api.updatePopup('autocomplete-popup', payload) }
+      else {
+        window.__autoOpen = true
+        window.api.showPopup({ key: 'autocomplete-popup', x: r ? Math.round(r.left) : 80, y: r ? Math.round(r.bottom + 4) : 46, width: r ? Math.round(r.width) : 520, height: Math.min(360, items.length * 40 + 12), focus: false, focusable: false, closeOnBlur: false, payload })
+      }
+    } else if (window.__autoOpen) {
+      window.__autoOpen = false
+      if (window.api.hidePopup) window.api.hidePopup('autocomplete-popup')
+    }
+  }, [open, suggestions, selected, aiMode, value])
+
+  // Selector de motor como ventana nativa.
+  useEffect(() => {
+    if (engOpen) {
+      const r = (document.querySelector('.engine-chip') || {}).getBoundingClientRect ? document.querySelector('.engine-chip').getBoundingClientRect() : null
+      const items = (engines || []).map((e) => ({ title: e.name, url: e.id, type: 'engine', active: e.id === (defaultEngine || {}).id }))
+      window.api.showPopup({ key: 'engine-popup', x: r ? Math.round(r.left) : 80, y: r ? Math.round(r.bottom + 4) : 46, width: 240, height: Math.min(300, items.length * 38 + 12), focus: false, focusable: false, closeOnBlur: true, payload: { type: 'engine', items, query: '', selected: 0 } })
+    } else if (window.api.hidePopup) {
+      window.api.hidePopup('engine-popup')
+    }
+  }, [engOpen, engines, defaultEngine])
+
+  useEffect(() => {
+    const off = window.api.onPopupAction(({ key, data }) => {
+      if (key === 'autocomplete-popup') {
+        let p = null
+        try { p = JSON.parse(data || '{}') } catch {}
+        if (p && p.t === 'pick' && suggestions[p.i]) pick(suggestions[p.i])
+        return
+      }
+      if (key === 'engine-popup') {
+        let p = null
+        try { p = JSON.parse(data || '{}') } catch {}
+        if (p && p.t === 'pick' && engines[p.i]) {
+          setDefaultEngine(engines[p.i])
+          setEngOpen(false)
+          window.api.setSetting({ defaultSearchEngine: engines[p.i].id })
+        }
+        return
+      }
+    })
+    return off
+  }, [suggestions, engines, defaultEngine, pick, setEngOpen])
+
+  useEffect(() => () => {
+    if (window.__autoOpen) { window.__autoOpen = false; if (window.api.hidePopup) window.api.hidePopup('autocomplete-popup') }
+    if (window.api.hidePopup) window.api.hidePopup('engine-popup')
+  }, [])
 
   useEffect(() => {
     if (focusSignal > 0) {
@@ -152,19 +208,6 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
     return () => clearTimeout(timerRef.current)
   }, [value, internalKey, aiMode, focused])
 
-  function toggleAi() {
-    setAiMode((m) => {
-      const next = !m
-      if (next) setOpen(true)
-      else setOpen(false)
-      return next
-    })
-    setTimeout(() => {
-      if (aiInputRef.current) aiInputRef.current.focus()
-      else if (inputRef.current) inputRef.current.focus()
-    }, 0)
-  }
-
   function resolveTarget(raw) {
     if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return raw
     if (/^localhost(:\d+)?(\/.*)?$/.test(raw)) return 'http://' + raw
@@ -228,22 +271,8 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
         else if (cmd === 'traducir' || cmd === 'translate') prompt = 'Traduce al español:\n\n' + rest
         else if (cmd === 'corregir' || cmd === 'corrige') prompt = 'Corrige la gramática y ortografía:\n\n' + rest
       }
-      const userMsg = { role: 'user', content: prompt }
-      threadRef.current = [...threadRef.current, userMsg]
-      setThread(threadRef.current)
       setValue('')
-      setAiBusy(true)
-      aiBusyRef.current = true
-      setOpen(true)
-      const res = await window.api.aiChat(threadRef.current)
-      aiBusyRef.current = false
-      setAiBusy(false)
-      const content = res && res.text
-        ? res.text
-        : 'Error: ' + ((res && res.error) || 'sin respuesta')
-      threadRef.current = [...threadRef.current, { role: 'assistant', content }]
-      setThread(threadRef.current)
-      setTimeout(() => aiInputRef.current && aiInputRef.current.focus(), 0)
+      sendAiMessage(prompt)
       return
     }
     if (suggestions[selected]) {
@@ -280,13 +309,8 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
     if (inputRef.current) inputRef.current.blur()
   }
 
-  async function aiFollowUp(e) {
-    e.preventDefault()
-    const el = aiInputRef.current
-    if (!el) return
-    const text = el.value.trim()
+  async function sendAiMessage(text) {
     if (!text || aiBusyRef.current) return
-    el.value = ''
     const userMsg = { role: 'user', content: text }
     threadRef.current = [...threadRef.current, userMsg]
     setThread(threadRef.current)
@@ -299,6 +323,32 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
     threadRef.current = [...threadRef.current, { role: 'assistant', content }]
     setThread(threadRef.current)
   }
+
+  // Asistente IA como ventana nativa centrada (UX clara: historial + entrada).
+  useEffect(() => {
+    if (aiMode || thread.length > 0 || aiBusy) {
+      const payload = { type: 'ai', thread, busy: aiBusy }
+      if (window.__aiOpen) { if (window.api.updatePopup) window.api.updatePopup('ai-popup', payload) }
+      else {
+        window.__aiOpen = true
+        window.api.showPopup({ key: 'ai-popup', x: Math.round(window.innerWidth / 2 - 320), y: 60, width: 640, height: Math.min(480, window.innerHeight - 140), focus: true, closeOnBlur: false, keepOpen: true, payload })
+      }
+    } else if (window.__aiOpen) {
+      window.__aiOpen = false
+      if (window.api.hidePopup) window.api.hidePopup('ai-popup')
+    }
+  }, [aiMode, thread, aiBusy])
+
+  useEffect(() => {
+    const off = window.api.onPopupAction(({ key, data }) => {
+      if (key !== 'ai-popup') return
+      let p = null
+      try { p = JSON.parse(data || '{}') } catch {}
+      if (p && p.t === 'send') sendAiMessage(p.v)
+      if (p && p.t === 'close') { setAiMode(false); setOpen(false) }
+    })
+    return off
+  }, [thread, aiBusy])
 
   function onKeyDown(e) {
     if (aiMode || value.trim().startsWith('/')) return
@@ -381,26 +431,7 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
             >
               {defaultEngine.name.slice(0, 1).toUpperCase()}
             </button>
-            {engOpen && (
-              <div className="engine-menu">
-                {engines.map((e) => (
-                  <button
-                    key={e.id}
-                    className={'engine-item' + (e.id === defaultEngine.id ? ' active' : '')}
-                    onMouseDown={(ev) => {
-                      ev.preventDefault()
-                      setDefaultEngine(e)
-                      setEngOpen(false)
-                      window.api.setSetting({ defaultSearchEngine: e.id })
-                    }}
-                  >
-                    <span className="engine-letter">{e.name.slice(0, 1).toUpperCase()}</span>
-                    <span className="engine-name">{e.name}</span>
-                    {e.id === defaultEngine.id && <span className="engine-check">✓</span>}
-                  </button>
-                ))}
-              </div>
-            )}
+            {engOpen && null}
           </>
         )}
         {!isInternal && security && (
@@ -418,7 +449,12 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
           <input
             ref={inputRef}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value
+              setValue(v)
+              if (v.trim().startsWith('/')) { if (!aiMode) setAiMode(true) }
+              else if (v.trim() && aiMode) setAiMode(false)
+            }}
             onFocus={(e) => { setFocused(true); e.target.select() }}
             onBlur={() => { setFocused(false); setTimeout(() => setOpen(false), 150) }}
             onKeyDown={onKeyDown}
@@ -449,76 +485,12 @@ export default function AddressBar({ url, internalKey, focusSignal, navState, on
               </svg>
             </button>
           )}
-          <button
-            type="button"
-            className={'bar-btn ai-btn' + (aiMode ? ' on' : '')}
-            title="Preguntar a la IA (o escribe /)"
-            onClick={toggleAi}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2l1.6 4.6L18 8l-4.4 1.4L12 14l-1.6-4.6L6 8l4.4-1.4z" />
-              <path d="M18.5 13l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z" opacity="0.7" />
-              <path d="M5 14l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z" opacity="0.7" />
-            </svg>
-          </button>
         </span>
       </form>
 
-      {open && !aiMode && suggestions.length > 0 && (
-        <div className="autocomplete">
-          {suggestions.map((s, i) => (
-            <div
-              key={i}
-              className={'suggestion' + (i === selected ? ' selected' : '')}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                pick(s)
-              }}
-            >
-              <span className={'sug-type ' + s.type}>
-                {s.type === 'history' ? 'H' : s.type === 'bookmark' ? 'B' : s.type === 'url' ? '→' : 'S'}
-              </span>
-              <span className="sug-title">{s.title}</span>
-              <span className="sug-url">{s.meta || s.url}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {open && !aiMode && suggestions.length > 0 && null}
 
-      {aiMode && (
-        <div className="ai-panel">
-          <div className="ai-head">
-            <span className="ai-title">Asistente IA</span>
-            <button className="bar-btn" title="Cerrar" onClick={() => setAiMode(false)}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div className="ai-thread">
-            {thread.length === 0 && !aiBusy && (
-              <div className="ai-empty">
-                Pregunta cualquier cosa. Ejemplos: "Explica qué es el DOM", "Resume https://es.wikipedia.org/wiki/Chromium", "Escribe un poema sobre Linux".
-              </div>
-            )}
-            {thread.map((m, i) => (
-              <div key={i} className={'ai-msg ' + m.role}>
-                {m.content}
-              </div>
-            ))}
-            {aiBusy && <div className="ai-msg assistant ai-thinking">Pensando…</div>}
-          </div>
-          <form className="ai-input" onSubmit={aiFollowUp}>
-            <input ref={aiInputRef} placeholder="Escribe un mensaje…" spellCheck={false} />
-            <button type="submit" className="bar-btn" title="Enviar">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 2L11 13" />
-                <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-              </svg>
-            </button>
-          </form>
-        </div>
-      )}
+      {aiMode && null}
     </div>
   )
 }

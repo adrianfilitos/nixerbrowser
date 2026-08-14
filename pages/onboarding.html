@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'" />
+    <title>Bienvenido a Nixer Browser</title>
+    <style>
+      :root { --bg:#0f0f14; --card:#18181f; --card2:#20202a; --border:#2a2a34; --text:#efeff6; --dim:#90909e; --faint:#62626e; --accent:#6c7bff; --accent2:#4a5ae0; --ok:#3da26e; --danger:#e05252; }
+      * { box-sizing:border-box; margin:0; padding:0; }
+      body { font-family:system-ui,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; display:flex; align-items:center; justify-content:center; user-select:none; }
+      .bg { position:fixed; inset:-40%; background:radial-gradient(60% 50% at 30% 20%, rgba(108,123,255,.28), transparent 60%), radial-gradient(50% 45% at 75% 70%, rgba(61,162,110,.18), transparent 60%), radial-gradient(40% 40% at 60% 10%, rgba(184,74,224,.12), transparent 60%); animation:bgmove 18s ease-in-out infinite alternate; }
+      @keyframes bgmove { from { transform:translate(0,0) scale(1) } to { transform:translate(-4%,3%) scale(1.08) } }
+      .wrap { position:relative; width:440px; max-width:94vw; }
+      .card { background:var(--card); border:1px solid var(--border); border-radius:22px; padding:34px 34px 28px; box-shadow:0 24px 70px rgba(0,0,0,.45); animation:pop .45s cubic-bezier(.2,.9,.3,1.2); }
+      @keyframes pop { from { opacity:0; transform:translateY(14px) scale(.96) } to { opacity:1; transform:none } }
+      .logo { width:72px; height:72px; margin:0 auto 16px; border-radius:22px; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:32px; color:#fff; box-shadow:0 10px 26px rgba(108,123,255,.35); animation:float 3.5s ease-in-out infinite; }
+      @keyframes float { 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-5px) } }
+      h1 { font-size:24px; text-align:center; }
+      .sub { color:var(--dim); font-size:13.5px; text-align:center; margin:8px 0 22px; line-height:1.5; }
+      .row { display:flex; gap:10px; }
+      .btn { flex:1; height:46px; border:none; border-radius:12px; background:var(--card2); color:var(--text); font-size:14px; font-weight:600; cursor:pointer; transition:transform .08s ease, filter .15s ease; display:flex; align-items:center; justify-content:center; gap:8px; }
+      .btn:hover { filter:brightness(1.12); }
+      .btn:active { transform:scale(.97); }
+      .btn.primary { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; }
+      .btn.ghost { background:transparent; color:var(--dim); border:1px solid var(--border); }
+      .btn.block { width:100%; margin-bottom:10px; }
+      .providers { margin-top:14px; }
+      .providers .or { text-align:center; color:var(--faint); font-size:11.5px; margin:10px 0; }
+      .provider { width:100%; height:44px; margin-bottom:8px; border:1px solid var(--border); border-radius:12px; background:var(--card); color:var(--text); font-size:13.5px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; transition:background .15s; }
+      .provider:hover { background:var(--card2); }
+      .provider svg { width:18px; height:18px; }
+      label { display:block; text-align:left; font-size:12px; color:var(--dim); margin:14px 0 6px; }
+      input[type="text"], input[type="email"], input[type="password"] { width:100%; height:44px; padding:0 14px; border-radius:12px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px; outline:none; }
+      input:focus { border-color:var(--accent); }
+      .colors { display:flex; justify-content:center; gap:10px; margin-top:12px; }
+      .color { width:32px; height:32px; border-radius:50%; cursor:pointer; border:3px solid transparent; transition:transform .1s; }
+      .color:hover { transform:scale(1.12); }
+      .color.selected { border-color:var(--text); }
+      .err { color:var(--danger); font-size:12.5px; min-height:18px; margin-top:10px; text-align:center; }
+      .success { text-align:center; padding:20px 0; animation:pop .4s ease; }
+      .success .check { width:64px; height:64px; margin:0 auto 14px; border-radius:50%; background:var(--ok); display:flex; align-items:center; justify-content:center; animation:pop .5s cubic-bezier(.2,.9,.3,1.3); }
+      .back { background:none; border:none; color:var(--dim); cursor:pointer; font-size:12.5px; margin-top:12px; display:block; margin-left:auto; margin-right:auto; }
+      .back:hover { color:var(--text); }
+      .step { display:none; }
+      .step.active { display:block; animation:pop .35s ease; }
+      .hint { color:var(--faint); font-size:11.5px; text-align:center; margin-top:14px; line-height:1.4; }
+    </style>
+  </head>
+  <body>
+    <div class="bg"></div>
+    <div class="wrap">
+      <div class="card">
+        <div class="step active" id="step-intro">
+          <div class="logo">N</div>
+          <h1>Bienvenido a Nixer</h1>
+          <p class="sub">Tu navegador, tus datos. Crea un perfil o inicia sesión para continuar.</p>
+          <button class="btn primary block" id="btnLocal">Crear perfil local</button>
+          <button class="btn block" id="btnSignin">Iniciar sesión</button>
+          <div class="providers" id="providers"></div>
+          <div class="hint">Los perfiles guardan sus datos por separado. Con la nube, se sincronizan entre tus dispositivos.</div>
+        </div>
+
+        <div class="step" id="step-local">
+          <div class="logo" style="width:56px;height:56px;font-size:24px">N</div>
+          <h1>Tu perfil local</h1>
+          <p class="sub">Sin contraseña. Se guarda solo en este equipo.</p>
+          <label for="localName">Nombre del perfil</label>
+          <input type="text" id="localName" placeholder="Ej. Ana" maxlength="24" />
+          <label>Color</label>
+          <div class="colors" id="colors"></div>
+          <button class="btn primary block" id="localCreate" style="margin-top:20px">Crear perfil</button>
+          <div class="err" id="localErr"></div>
+          <button class="back" id="localBack">← Volver</button>
+        </div>
+
+        <div class="step" id="step-signin">
+          <div class="logo" style="width:56px;height:56px;font-size:24px">N</div>
+          <h1>Iniciar sesión</h1>
+          <p class="sub">Tus datos sincronizados en todos tus dispositivos.</p>
+          <div class="providers" id="providers2" style="margin-top:0"></div>
+          <div class="providers"><div class="or">o con correo y contraseña</div></div>
+          <label for="loginEmail">Correo</label>
+          <input type="email" id="loginEmail" placeholder="tu@correo.com" />
+          <label for="loginPass">Contraseña</label>
+          <input type="password" id="loginPass" placeholder="••••••••" />
+          <button class="btn primary block" id="loginGo" style="margin-top:18px">Entrar</button>
+          <button class="btn block" id="signupGo">Crear cuenta nueva</button>
+          <div class="err" id="loginErr"></div>
+          <button class="back" id="loginBack">← Volver</button>
+        </div>
+
+        <div class="step" id="step-done">
+          <div class="success">
+            <div class="check"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+            <h1 id="doneName">¡Bienvenido!</h1>
+            <p class="sub" id="doneSub">Abriendo el navegador…</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      var COLORS = ['#6c7bff', '#3da26e', '#d99a2b', '#e05252', '#b44ae0', '#1fb6c9', '#f07a5a', '#8a9b6e']
+      var selected = COLORS[0]
+      var providers = []
+      var providerIcons = {
+        google: '<svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.9 0 7.4 1.3 10.1 3.9l7.5-7.5C36.9 1.8 31 0 24 0 14.6 0 6.5 5.3 2.5 13.1l8.8 6.9C13.3 14.9 18.2 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.6c0-1.5-.1-3-.4-4.4H24v8.8h12.7c-.6 3-2.4 5.6-5 7.3l8 6.2c4.6-4.3 6.8-10.7 6.8-17.9z"/><path fill="#FBBC05" d="M11.3 28.1c-.7-2-1.1-4.1-1.1-6.1s.4-4.1 1.1-6.1l-8.8-6.9C.5 12.7 0 17 0 21.6s.5 8.9 2.5 12.6l8.8-6.1z"/><path fill="#34A853" d="M24 44.5c6.9 0 12.8-2.3 17-6.2l-8-6.2c-2.3 1.6-5.3 2.5-9 2.5-5.8 0-10.7-3.4-13.1-8.4l-8.8 6.1c4 7.8 12.1 12.2 22.9 12.2z"/></svg>',
+        microsoft: '<svg viewBox="0 0 24 24"><rect x="1" y="1" width="11" height="11" fill="#F25022"/><rect x="12" y="1" width="11" height="11" fill="#7FBA00"/><rect x="1" y="12" width="11" height="11" fill="#00A4EF"/><rect x="12" y="12" width="11" height="11" fill="#FFB900"/></svg>',
+        github: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.1.1 1.7 1.2 1.7 1.2 1 1.7 2.6 1.2 3.3.9.1-.7.4-1.2.7-1.5-2.5-.3-5.1-1.3-5.1-5.6 0-1.2.4-2.2 1.1-3-.1-.3-.5-1.4.1-2.9 0 0 .9-.3 3 1.1a10 10 0 0 1 5.4 0c2.1-1.4 3-1.1 3-1.1.6 1.5.2 2.6.1 2.9.7.8 1.1 1.8 1.1 3 0 4.3-2.6 5.3-5.1 5.6.4.3.7.9.7 1.9v2.8c0 .3.2.6.8.5A11.5 11.5 0 0 0 23.5 12C23.5 5.7 18.3.5 12 .5z"/></svg>',
+        apple: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.7 12.9c0-2.2 1.8-3.2 1.9-3.3-1-1.5-2.6-1.7-3.2-1.7-1.4-.1-2.7.8-3.4.8-.7 0-1.7-.8-2.8-.8-1.4 0-2.8.8-3.5 2.1-1.5 2.6-.4 6.5 1.1 8.6.7 1 1.5 2.2 2.6 2.1 1 0 1.4-.7 2.7-.7 1.3 0 1.7.7 2.7.7 1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2-.8-2-3.2zM14.6 5.6c.6-.7 1-1.7.9-2.6-.9 0-1.9.6-2.5 1.3-.6.6-1.1 1.6-.9 2.6.9.1 1.9-.5 2.5-1.3z"/></svg>',
+        facebook: '<svg viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.09 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.95.93-1.95 1.89v2.25h3.32l-.53 3.49h-2.79V24C19.61 23.09 24 18.1 24 12.07z"/></svg>',
+      }
+
+      function $(id) { return document.getElementById(id) }
+      function show(id) { document.querySelectorAll('.step').forEach(function (s) { s.classList.remove('active') }); $(id).classList.add('active') }
+      function err(id, msg) { $(id).textContent = msg || '' }
+
+      // ---- Sonidos (WebAudio, sintetizados) ----
+      var actx = null
+      function audio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)() } catch {} } return actx }
+      function tone(freq, dur, type, gain, when) {
+        var ctx = audio(); if (!ctx) return
+        var o = ctx.createOscillator(), g = ctx.createGain()
+        o.type = type || 'sine'; o.frequency.value = freq
+        o.connect(g); g.connect(ctx.destination)
+        var t = ctx.currentTime + (when || 0)
+        g.gain.setValueAtTime(0.0001, t)
+        g.gain.exponentialRampToValueAtTime(gain || 0.18, t + 0.02)
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+        o.start(t); o.stop(t + dur + 0.05)
+      }
+      function sClick() { tone(420, 0.07, 'triangle', 0.1) }
+      function sHover() { tone(600, 0.05, 'sine', 0.05) }
+      function sChime() { tone(523, 0.22, 'sine', 0.2); tone(659, 0.22, 'sine', 0.18, 0.09); tone(784, 0.45, 'sine', 0.16, 0.18) }
+      function sErr() { tone(220, 0.18, 'sawtooth', 0.12); tone(180, 0.25, 'sawtooth', 0.1, 0.08) }
+
+      document.querySelectorAll('.btn, .provider, .back').forEach(function (b) {
+        b.addEventListener('mouseenter', function () { sHover() })
+        b.addEventListener('click', function () { sClick() })
+      })
+
+      // ---- UI ----
+      var colorsBox = $('colors')
+      COLORS.forEach(function (c) {
+        var el = document.createElement('div')
+        el.className = 'color' + (c === selected ? ' selected' : '')
+        el.style.background = c
+        el.onclick = function () {
+          sClick()
+          colorsBox.querySelectorAll('.color').forEach(function (x) { x.classList.remove('selected') })
+          el.classList.add('selected')
+          selected = c
+        }
+        colorsBox.appendChild(el)
+      })
+
+      function renderProviders(target) {
+        var box = $(target)
+        box.innerHTML = ''
+        if (!providers.length) return
+        var or = document.createElement('div'); or.className = 'or'; or.textContent = 'o continúa con'
+        box.appendChild(or)
+        providers.forEach(function (p) {
+          var b = document.createElement('button')
+          b.className = 'provider'
+          b.innerHTML = (providerIcons[p] || '') + '<span>' + (p === 'microsoft' ? 'Microsoft' : p.charAt(0).toUpperCase() + p.slice(1)) + '</span>'
+          b.onclick = function () { doProvider(p) }
+          box.appendChild(b)
+        })
+      }
+
+      $('btnLocal').onclick = function () { show('step-local'); $('localName').focus() }
+      $('btnSignin').onclick = function () { show('step-signin'); $('loginEmail').focus() }
+      $('localBack').onclick = function () { show('step-intro') }
+      $('loginBack').onclick = function () { show('step-intro') }
+
+      $('localCreate').onclick = async function () {
+        var name = $('localName').value.trim()
+        if (!name) { err('localErr', 'Indica un nombre'); $('localName').focus(); return }
+        try {
+          await browserAPI.profiles.createLocal(name, selected)
+          sChime(); done('¡Bienvenido, ' + name + '!')
+        } catch (e) { err('localErr', e.message || 'Error'); sErr() }
+      }
+      $('loginGo').onclick = function () { doEmail('signinCloud') }
+      $('signupGo').onclick = function () { doEmail('signupCloud') }
+      async function doEmail(method) {
+        var email = $('loginEmail').value.trim()
+        var pass = $('loginPass').value
+        if (!email || !pass) { err('loginErr', 'Indica correo y contraseña'); return }
+        try {
+          await browserAPI.profiles[method](email, pass)
+          sChime(); done('¡Bienvenido!')
+        } catch (e) { err('loginErr', e.message || 'Error'); sErr() }
+      }
+      async function doProvider(p) {
+        try {
+          await browserAPI.profiles.signinProvider(p)
+          sChime(); done('¡Bienvenido!')
+        } catch (e) { err('loginErr', e.message || 'Error'); sErr() }
+      }
+      function done(name) {
+        $('doneName').textContent = name || '¡Bienvenido!'
+        $('doneSub').textContent = 'Abriendo el navegador…'
+        show('step-done')
+        // El cierre lo gestiona el proceso principal (abre el navegador).
+      }
+      $('loginEmail').addEventListener('keydown', function (e) { if (e.key === 'Enter') doEmail('signinCloud') })
+      $('loginPass').addEventListener('keydown', function (e) { if (e.key === 'Enter') doEmail('signinCloud') })
+      $('localName').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('localCreate').click() })
+
+      browserAPI.profiles.status().then(function (st) {
+        providers = (st && st.cloudConfigured && st.providers) ? st.providers : []
+        renderProviders('providers')
+        renderProviders('providers2')
+        if (!providers.length) document.getElementById('providers').style.display = 'none'
+      }).catch(function () {})
+    </script>
+  </body>
+</html>

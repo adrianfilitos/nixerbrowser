@@ -46,6 +46,7 @@
         var rows = [
           ['Versión de la app', i.version],
           ['Build (commit)', i.build || '—'],
+          ['Build (fecha)', i.buildTime ? i.buildTime.replace('T', ' ').slice(0, 19) + ' UTC' : '—'],
           ['Electron', i.electron],
           ['Chromium', i.chrome],
           ['Node.js', i.node],

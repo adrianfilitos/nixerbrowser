@@ -19,7 +19,7 @@ export default function BookmarksBar({ bookmarks, onNavigate, onRemove, onOverla
   const [dragId, setDragId] = useState(null)
 
   useEffect(() => {
-    onOverlayChange(!!menu)
+    onOverlayChange('bookmarks', !!menu)
   }, [menu, onOverlayChange])
 
   const menuItems = menu

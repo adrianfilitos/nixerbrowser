@@ -10,7 +10,16 @@ function ctxFor(event) {
 
 function ctxForWc(wc) {
   const win = BrowserWindow.fromWebContents(wc)
-  return windows.get(win) || null
+  if (win && windows.has(win)) return windows.get(win)
+  // fallback: buscar la ventana cuya pestaña (WebContentsView) tenga este webContents
+  for (const c of windows.values()) {
+    if (c.tabs && c.tabs.size) {
+      for (const tab of c.tabs.values()) {
+        if (tab.wc === wc) return c
+      }
+    }
+  }
+  return null
 }
 
 function ui(ctx) {
@@ -27,7 +36,18 @@ function sendUi(ctx, action, data) {
 }
 
 function currentCtx() {
-  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+  let win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+  if (!win) return null
+  if (!windows.has(win)) {
+    // El foco puede estar en una ventana-popup (menú/diálogo) que no está
+    // registrada: se resuelve su contexto a través de la ventana padre.
+    try {
+      const parent = win.getParentWindow()
+      if (parent && windows.has(parent)) return windows.get(parent)
+    } catch {}
+    win = BrowserWindow.getAllWindows().find((w) => windows.has(w)) || null
+    if (!win) return null
+  }
   return windows.get(win) || null
 }
 

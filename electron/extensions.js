@@ -60,6 +60,20 @@ function registerTab(wc) {
   }
 }
 
+function registerTabInWindow(wc, win) {
+  if (!extEngine || !wc || !win) return
+  try {
+    if (wc.session !== session.defaultSession) return
+  } catch {
+    return
+  }
+  extEngine.addTab(wc, win)
+  if (pendingExtCreate.length) {
+    const resolve = pendingExtCreate.shift()
+    resolve([wc, win])
+  }
+}
+
 async function loadExtensionFolder(dir) {
   try {
     const loaded = await session.defaultSession.loadExtension(dir)
@@ -149,6 +163,7 @@ function getEngine() {
 module.exports = {
   setupExtensions,
   registerTab,
+  registerTabInWindow,
   loadExtensionFolder,
   rehydrateExtensions,
   crxZipOffset,

@@ -26,9 +26,10 @@ const DEFAULT_SETTINGS = {
   theme: 'dark',
   showBookmarksBar: true,
   blockAds: true,
-  blockThirdPartyCookies: true,
+  blockTrackers: true,
+  blockThirdPartyCookies: false,
   blockScripts: false,
-  httpsUpgrade: false,
+  httpsUpgrade: true,
   sendDnt: false,
   customSearchEngines: [],
   aiBaseUrl: '',
@@ -59,7 +60,7 @@ const DEFAULT_SETTINGS = {
   highContrast: false,
   uiFontScale: 100,
   toolbarFontSize: 13,
-  tabMinWidth: 120,
+  tabMinWidth: 72,
   showHomeButton: true,
   showDownloadsButton: true,
   showExtensionsButton: true,
@@ -114,8 +115,12 @@ const DEFAULTS = {
 
 let state
 
+// Directorio de datos activo: por defecto userData, y por PERFIL cuando se
+// activa uno (userData/profiles/<id>/). Se cambia con setDataDir().
+let dataDir = app.getPath('userData')
+
 function file(name) {
-  return path.join(app.getPath('userData'), name)
+  return path.join(dataDir, name)
 }
 
 // ---- Cifrado en reposo ----------------------------------------------------
@@ -250,7 +255,8 @@ const COLLECTIONS = {
 }
 
 function loadAll() {
-  const { created } = dbmod.open(app.getPath('userData'))
+  fs.mkdirSync(dataDir, { recursive: true })
+  const { created } = dbmod.open(dataDir)
   const s = {}
   for (const k of Object.keys(DEFAULTS)) s[k] = loadCollection(k)
   s.settings = Object.assign({}, DEFAULT_SETTINGS, loadCollection('settings'))
@@ -269,6 +275,25 @@ function loadCollection(name) {
   }
 }
 
+let changeCb = null
+
+function onDataChange(cb) {
+  changeCb = cb
+}
+
+// Cambia el directorio de datos activo (perfil). Reabre la BD y recarga el estado.
+function setDataDir(dir) {
+  dataDir = dir
+  fs.mkdirSync(dir, { recursive: true })
+  try { dbmod.open(dir) } catch {}
+  state = loadAll()
+  return state
+}
+
+function getDataDir() {
+  return dataDir
+}
+
 function persist(name) {
   try {
     const cols = COLLECTIONS[name]
@@ -276,6 +301,9 @@ function persist(name) {
     const rows = cols.to(state[name])
     dbmod.clearInsert(cols.table, cols.columns, rows)
   } catch {}
+  if (changeCb) {
+    try { changeCb(name) } catch {}
+  }
 }
 
 function migrateLegacy(s) {
@@ -411,7 +439,14 @@ function upsertDownload(d) {
 }
 
 function clearDownloads() {
-  state.downloads = state.downloads.filter((d) => d.state === 'in-progress')
+  // Vacía la lista de descargas (completadas, canceladas Y en curso). El gestor
+  // puede re-añadir una en curso vía upsert si sigue descargando.
+  state.downloads = []
+  persist('downloads')
+}
+
+function removeDownload(id) {
+  state.downloads = state.downloads.filter((d) => d.id !== id)
   persist('downloads')
 }
 
@@ -591,6 +626,11 @@ module.exports = {
   updateBookmark,
   reorderBookmarks,
   isBookmarked,
+  replaceBookmarks: (list) => { state.bookmarks = list || []; persist('bookmarks') },
+  replaceHistory: (list) => { state.history = (list || []).slice(0, 5000); persist('history') },
+  replaceReadingList: (list) => { state.readingList = list || []; persist('readingList') },
+  replaceWorkspaces: (list) => { state.workspaces = list || []; persist('workspaces') },
+  replaceRecentSearches: (list) => { state.recentSearches = list || []; persist('recentSearches') },
   settings,
   settingsDefaults: () => JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
   setSettings,
@@ -601,6 +641,7 @@ module.exports = {
   downloads,
   upsertDownload,
   clearDownloads,
+  removeDownload,
   session,
   saveSession,
   isLoopbackUrl,
@@ -627,4 +668,7 @@ module.exports = {
   removeExtension,
   setExtensionEnabled,
   contentScriptsFor,
+  setDataDir,
+  getDataDir,
+  onDataChange,
 }

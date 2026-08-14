@@ -12,7 +12,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
 app.whenReady().then(async () => {
   await delay(4500)
-  const win = BrowserWindow.getAllWindows()[0]
+  const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('index.html')) || BrowserWindow.getAllWindows()[0]
   const ui = win.webContents
   const logs = []
   ui.on('console-message', (_e, level, message) => {

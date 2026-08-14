@@ -22,28 +22,34 @@ app.whenReady().then(async () => {
 
   const order = () => ui.executeJavaScript(`Array.from(document.querySelectorAll('.tab')).map(t => t.dataset.id)`)
   const before = await wto(order(), 4000, 'before')
-  const rects = await ui.executeJavaScript(`Array.from(document.querySelectorAll('.tab')).slice(0,2).map(t => { const r = t.getBoundingClientRect(); return { x: Math.round(r.x + r.width/2), y: Math.round(r.y + r.height/2) } })`)
-  const from = rects[0]
+  const rects = await ui.executeJavaScript(`Array.from(document.querySelectorAll('.tab')).slice(0,2).map(t => { const r = t.getBoundingClientRect(); return { x: Math.round(r.x + r.width/2), y: Math.round(r.y + r.height/2), left: r.left, width: r.width } })`)
   const to = rects[1]
+  const dropX = Math.round(to.left + to.width * 0.75)
+  const dropY = to.y
 
-  // drag por puntero: pointerdown → moves → pointerup
-  ui.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 })
-  const steps = 20
-  for (let i = 1; i <= steps; i++) {
-    ui.sendInputEvent({ type: 'mouseMove', x: Math.round(from.x + (to.x - from.x) * (i / steps)), y: from.y, button: 'left', buttons: 1, movementX: 2, movementY: 0 })
-    await delay(20)
-  }
-  await delay(400)
-  const draggingDuring = await ui.executeJavaScript(`!!document.querySelector('.tab.dragging')`)
-  ui.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
+  // drag nativo HTML5: dragstart -> dragover -> drop -> dragend (eventos DragEvent)
+  const dragRes = await ui.executeJavaScript(`(async () => {
+    const tabs = Array.from(document.querySelectorAll('.tab'))
+    const list = document.querySelector('.tab-list')
+    const first = tabs[0]
+    const dt = new DataTransfer()
+    first.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }))
+    await new Promise((r) => setTimeout(r, 80))
+    const dragging = !!document.querySelector('.tab.dragging')
+    list.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, clientX: ${dropX}, clientY: ${dropY}, dataTransfer: dt }))
+    const ind = document.querySelector('.tab-drop-indicator')
+    const indVisible = ind ? ind.style.opacity : 'NONE'
+    list.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, clientX: ${dropX}, clientY: ${dropY}, dataTransfer: dt }))
+    first.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, clientX: ${dropX}, clientY: ${dropY}, dataTransfer: dt }))
+    return { dragging, indVisible }
+  })()`)
   await delay(800)
 
   const after = await wto(order(), 4000, 'after')
   const draggingAfter = await ui.executeJavaScript(`!!document.querySelector('.tab.dragging')`)
-  const active = await ui.executeJavaScript(`document.querySelector('.tab.active') ? document.querySelector('.tab.active').dataset.id : null`)
 
-  console.log('REORDER:', JSON.stringify({ before, after, from, to, active, draggingDuring, draggingAfter }))
-  const ok = JSON.stringify(before) !== JSON.stringify(after) && draggingDuring === true && draggingAfter === false
+  console.log('REORDER:', JSON.stringify({ before, after, dropX, dropY, dragRes, draggingAfter }))
+  const ok = JSON.stringify(before) !== JSON.stringify(after) && dragRes.dragging === true && draggingAfter === false
   console.log('RESULT:', ok ? 'REORDER_OK' : 'REORDER_FAIL')
   win.close()
   setTimeout(() => app.exit(ok ? 0 : 1), 300)

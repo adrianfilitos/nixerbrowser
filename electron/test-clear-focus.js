@@ -1,0 +1,30 @@
+const { app, BrowserWindow } = require('electron')
+const path = require('path')
+const os = require('os')
+const fs = require('fs')
+process.env.NIXER_USER_DATA = path.join(os.tmpdir(), 'nixer-clear-focus-test')
+fs.rmSync(process.env.NIXER_USER_DATA, { recursive: true, force: true })
+require('./main')
+const delay = (ms) => new Promise((r) => setTimeout(r, ms))
+app.whenReady().then(async () => {
+  const store = require('./store')
+  store.upsertDownload({ id: 'd1', name: 'a.png', url: 'u1', path: 'x', received: 10, total: 10, state: 'completed', ts: Date.now() })
+  store.upsertDownload({ id: 'd2', name: 'b.pdf', url: 'u2', path: 'x', received: 5, total: 10, state: 'in-progress', ts: Date.now() })
+  let win = null
+  for (let i = 0; i < 25 && !win; i++) { const ws = BrowserWindow.getAllWindows(); if (ws.length) win = ws[0]; else await delay(400) }
+  const ui = win.webContents
+  const waitTab = () => ui.executeJavaScript(`(async () => { for (let i = 0; i < 60; i++) { if (document.querySelector('.tab')) return true; await new Promise(r => setTimeout(r, 200)) } return false })()`)
+  await waitTab()
+  await delay(1200)
+  const before = await ui.executeJavaScript(`window.api.downloadsList()`)
+  await ui.executeJavaScript(`window.api.downloadsClear()`).catch(() => {})
+  const after = await ui.executeJavaScript(`window.api.downloadsList()`)
+  console.log('CLEAR:', JSON.stringify({ before: before.length, after: after.length, inProgress: after.length && after[0].state }))
+  const cleared = after.length === 1 && after[0].state === 'in-progress'
+  const inputFocused = await ui.executeJavaScript(`(async () => { document.querySelector('.new-tab').click(); await new Promise(r => setTimeout(r, 500)); return document.activeElement === document.querySelector('.address-bar input') })()`)
+  console.log('NEWTAB_FOCUS:', inputFocused)
+  win.close()
+  console.log('RESULT:', cleared && inputFocused ? 'CLEAR_FOCUS_OK' : 'CLEAR_FOCUS_FAIL')
+  setTimeout(() => app.exit(0), 300)
+}).catch((e) => { console.log('ERR', e && e.stack); app.exit(2) })
+setTimeout(() => { console.log('HARD_TIMEOUT'); app.exit(3) }, 90000)

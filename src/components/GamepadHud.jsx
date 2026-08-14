@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 
 const CHEAT = [
   ['Stick izq', 'Cursor'],
@@ -18,28 +18,30 @@ const CHEAT = [
 ]
 
 export default function GamepadHud({ connected, gpName, cursorRef, hints, hintSel, hintActive, hudOpen, idle }) {
-  const dotRef = useRef(null)
-
   useEffect(() => {
-    if (!connected || !cursorRef) return
+    if (!connected || !cursorRef) {
+      if (window.api.cursorMove) window.api.cursorMove(0, 0, false)
+      return
+    }
     let raf = 0
     const draw = () => {
       const c = cursorRef.current
-      if (c && dotRef.current) {
-        dotRef.current.style.transform = 'translate(' + (c.x - 6) + 'px,' + (c.y - 6) + 'px)'
-        dotRef.current.style.opacity = c.visible ? (idle ? '0.35' : '1') : '0'
+      if (c && window.api.cursorMove) {
+        window.api.cursorMove(c.x, c.y, !!c.visible)
       }
       raf = requestAnimationFrame(draw)
     }
     raf = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      if (window.api.cursorMove) window.api.cursorMove(0, 0, false)
+    }
   }, [connected, cursorRef, idle])
 
   if (!connected) return null
 
   return (
     <>
-      <div className="gamepad-cursor" ref={dotRef} />
       {hintActive && (
         <div className="gamepad-hints">
           {hints.map((h, i) => (

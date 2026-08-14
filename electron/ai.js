@@ -34,4 +34,35 @@ async function chat(messages) {
   }
 }
 
-module.exports = { chat }
+const stripHtml = (s) => String(s || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim()
+
+async function searchWeb(query) {
+  const q = String(query || '').trim()
+  if (!q) return []
+  try {
+    const res = await fetch('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q), {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36' },
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!res.ok) return []
+    const html = await res.text()
+    const results = []
+    for (const block of html.split('<div class="result"')) {
+      if (block.indexOf('result__a') === -1) continue
+      const titleMatch = /<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/.exec(block)
+      if (!titleMatch) continue
+      let target = titleMatch[1]
+      const uddg = target.match(/[?&]uddg=([^&]+)/)
+      if (uddg) { try { target = decodeURIComponent(uddg[1]) } catch {} }
+      if (!/^https?:\/\//i.test(target)) continue
+      const snipMatch = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/.exec(block)
+      results.push({ title: stripHtml(titleMatch[2]), url: target, snippet: stripHtml(snipMatch && snipMatch[1]) })
+      if (results.length >= 5) break
+    }
+    return results
+  } catch (e) {
+    return []
+  }
+}
+
+module.exports = { chat, searchWeb }

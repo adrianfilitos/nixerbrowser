@@ -10,6 +10,7 @@ import SiteInfoPopup from './components/SiteInfoPopup.jsx'
 import TaskManager from './components/TaskManager.jsx'
 import Toasts from './components/Toasts.jsx'
 import Sidebar from './components/Sidebar.jsx'
+import AIPanel from './components/AIPanel.jsx'
 import GamepadHud from './components/GamepadHud.jsx'
 import OnScreenKeyboard from './components/OnScreenKeyboard.jsx'
 import { typeIntoChrome, typeIntoWebview } from './components/tvTyping.js'
@@ -18,13 +19,26 @@ import { I } from './components/icons.jsx'
 
 const PERM_NAMES = {
   media: 'Cámara y micrófono',
+  camera: 'Cámara',
+  microphone: 'Micrófono',
   geolocation: 'Ubicación',
   notifications: 'Notificaciones',
-  'clipboard-read': 'Portapapeles',
+  'clipboard-read': 'Leer portapapeles',
+  'clipboard-sanitized-write': 'Escribir portapapeles',
   'display-capture': 'Captura de pantalla',
   keyboardLock: 'Teclado',
   'window-management': 'Ventanas',
   fileSystem: 'Archivos',
+  serial: 'Puertos serie',
+  hid: 'Dispositivos HID',
+  usb: 'Dispositivos USB',
+  'storage-access': 'Almacenamiento',
+  'local-fonts': 'Fuentes locales',
+  fullscreen: 'Pantalla completa',
+  pointerLock: 'Bloqueo del puntero',
+  openExternal: 'Abrir enlaces externos',
+  midi: 'MIDI',
+  midiSysex: 'MIDI (sistema)',
 }
 
 const PAGE_TITLES = {
@@ -38,6 +52,7 @@ const PAGE_TITLES = {
   welcome: 'Bienvenida',
   passwords: 'Contraseñas',
   extensions: 'Extensiones',
+  permissions: 'Permisos de sitios',
   about: 'Acerca de Nixer',
   credits: 'Créditos',
   profiles: 'Perfiles',
@@ -59,17 +74,29 @@ function isLoopback(url) {
   }
 }
 
+function fallbackCopyText(t) {
+  const ta = document.createElement('textarea')
+  ta.value = t
+  ta.style.position = 'fixed'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  try { document.execCommand('copy') } catch {}
+  document.body.removeChild(ta)
+}
+
 function copyText(t) {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(t).catch(() => {})
-  } else {
-    const ta = document.createElement('textarea')
-    ta.value = t
-    document.body.appendChild(ta)
-    ta.select()
-    try { document.execCommand('copy') } catch {}
-    document.body.removeChild(ta)
-  }
+  if (!t) return
+  // El portapapeles del proceso principal funciona siempre (independiente del
+  // foco/gesto del usuario en la ventana), a diferencia de navigator.clipboard.
+  if (window.api && window.api.clipboardWrite) { window.api.clipboardWrite(t); return }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).catch(() => fallbackCopyText(t))
+      return
+    }
+  } catch {}
+  fallbackCopyText(t)
 }
 
 export default function App() {
@@ -89,11 +116,15 @@ export default function App() {
   const [shieldsAnchor, setShieldsAnchor] = useState(null)
   const [siteInfoUrl, setSiteInfoUrl] = useState(null)
   const [siteInfoAnchor, setSiteInfoAnchor] = useState(null)
+  const siteInfoUrlRef = useRef(null)
   const [taskManagerOpen, setTaskManagerOpen] = useState(false)
   const [splitWith, setSplitWith] = useState(null)
   const [closedCount, setClosedCount] = useState(0)
+  const [closedTabs, setClosedTabs] = useState([])
   const [statusUrl, setStatusUrl] = useState('')
   const [sidebar, setSidebar] = useState(null)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [sessionPrompt, setSessionPrompt] = useState(null)
   const [presentation, setPresentation] = useState(false)
   const [tabSearchOpen, setTabSearchOpen] = useState(false)
   const [tabSearchQuery, setTabSearchQuery] = useState('')
@@ -121,49 +152,106 @@ export default function App() {
   const [savePrompt, setSavePrompt] = useState(null)
   const [urlOverrides, setUrlOverrides] = useState({})
   const [maximized, setMaximized] = useState(false)
+  const bookmarkSuppressRef = useRef(false)
+  const bookmarkSelfClosedRef = useRef(false)
+  const bookmarkTimerRef = useRef(null)
+  const popupOpenRef = useRef(null)
+  const popupKeysRef = useRef(new Set())
+  const pendingPermitRef = useRef(null)
+  const pendingBookmarkRef = useRef(null)
+  const dialogRef = useRef(null)
+  const [paletteQuery, setPaletteQuery] = useState('')
+  const [paletteSel, setPaletteSel] = useState(0)
+  const [findQuery, setFindQuery] = useState('')
+  const [tabSearchSel, setTabSearchSel] = useState(0)
+  const [shieldsState, setShieldsState] = useState(null)
+  const shieldsStateRef = useRef(null)
+  const shieldsOriginRef = useRef(null)
+  const [siteInfoData, setSiteInfoData] = useState(null)
+  const [taskManagerTick, setTaskManagerTick] = useState(0)
+  const taskRowsRef = useRef([])
+  const paletteItemsRef = useRef([])
 
   const viewInfoRef = useRef({ newtab: '', welcome: '', pages: '', preload: '' })
   const incognitoRef = useRef(false)
   const settingsRef = useRef(null)
   const tabsRef = useRef([])
-  const elsRef = useRef(new Map())
-  const attachedRef = useRef(new WeakSet())
   const closedTabsRef = useRef([])
   const failedUrlRef = useRef(new Map())
+  const reloadWatchRef = useRef(null)
   const sessionTimerRef = useRef(null)
+  const creatingRef = useRef(new Set())
+  const prevTabIdsRef = useRef(new Set())
   const [ready, setReady] = useState(false)
 
   const activeTab = tabs.find((t) => t.active) || null
   const inProgress = downloads.filter((d) => d.state === 'in-progress').length
   const tvMode = !!(settings && settings.tvMode)
 
-  function activeEl() {
-    return activeTab ? elsRef.current.get(activeTab.id) : null
+  function activeTabId() {
+    const t = tabsRef.current.find((x) => x.active)
+    return t ? t.id : null
+  }
+
+  // Los popups son ventanas nativas externas: la página NUNCA se oculta.
+  // Esta función queda como no-op para los componentes que la usaban.
+  function overlaySource() {}
+
+  function tabSearchItems(q) {
+    const lq = (q || '').toLowerCase()
+    return tabs.filter((t) => !lq || ((t.title || '') + ' ' + (t.url || '')).toLowerCase().includes(lq))
+  }
+
+  function buildListPopup(isPalette) {
+    if (isPalette) {
+      const items = paletteItemsRef.current.map((it) => it.sep ? it : ({ title: it.label, accel: it.accel, meta: it.meta }))
+      return { key: 'palette-popup', payload: { type: 'palette', items, query: paletteQuery, selected: paletteSel } }
+    }
+    const items = tabSearchItems(tabSearchQuery).slice(0, 20).map((t) => ({ title: t.title || 'Nueva pestaña', url: t.url || '', id: t.id }))
+    return { key: 'tabsearch-popup', payload: { type: 'tabsearch', items, query: tabSearchQuery, selected: tabSearchSel } }
+  }
+
+  function refreshShields() {
+    const origin = shieldsOriginRef.current
+    if (!origin) return
+    window.api.shieldsGet(origin).then((st) => {
+      if (st) { shieldsStateRef.current = st; setShieldsState(st) }
+    }).catch(() => {})
+  }
+
+  function openNativePopup(key, opts) {
+    if (!window.api.showPopup) return
+    window.api.showPopup(Object.assign({ key }, opts))
+    popupOpenRef.current = key
+  }
+
+  // Popups gestionados por efectos: se abre/actualiza según si la ventana sigue
+  // abierta (Set), para que cerrar y REABRIR siempre vuelva a crearla.
+  function showAppPopup(key, opts, payload) {
+    if (!window.api.showPopup) return
+    if (popupKeysRef.current.has(key)) { if (window.api.updatePopup) window.api.updatePopup(key, payload) }
+    else { window.api.showPopup(Object.assign({ key }, opts, { payload })); popupKeysRef.current.add(key) }
+  }
+  function hideAppPopup(key) {
+    if (popupKeysRef.current.has(key)) { window.api.hidePopup(key); popupKeysRef.current.delete(key) }
   }
 
   function handleWheel(e) {
     if (!e.ctrlKey) return
     e.preventDefault()
-    const el = activeEl()
-    if (!el) return
-    try {
-      const z = el.getZoomFactor() || 1
-      el.setZoomFactor(Math.min(3, Math.max(0.25, z + (e.deltaY < 0 ? 0.1 : -0.1))))
-    } catch {}
+    const id = activeTabId()
+    if (!id) return
+    window.api.tabZoomGet(id).then((z) => {
+      window.api.tabZoomSet(id, Math.min(3, Math.max(0.25, (z || 1) + (e.deltaY < 0 ? 0.1 : -0.1))))
+    }).catch(() => {})
   }
 
   function refreshNavState() {
-    const el = activeEl()
-    if (!el) return
-    let canGoBack = false
-    let canGoForward = false
-    let isLoading = false
-    try {
-      canGoBack = el.canGoBack()
-      canGoForward = el.canGoForward()
-      isLoading = el.isLoading()
-    } catch {}
-    setNavState({ canGoBack, canGoForward, isLoading })
+    const t = tabsRef.current.find((x) => x.active)
+    if (!t) return
+    window.api.tabNavState(t.id).then((st) => {
+      setNavState({ canGoBack: !!st.canGoBack, canGoForward: !!st.canGoForward, isLoading: !!st.isLoading })
+    }).catch(() => {})
   }
 
   function internalForSrc(src) {
@@ -207,88 +295,267 @@ export default function App() {
     return viewInfoRef.current.welcome
   }
 
-  function attach(el, id) {
-    if (attachedRef.current.has(el)) return
-    attachedRef.current.add(el)
-    const update = (patch) => setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
-
-    el.addEventListener('dom-ready', () => {
-      try {
-        const wcId = el.getWebContentsId()
-        update({ wcId })
-        const t = tabsRef.current.find((x) => x.id === id)
-        if (t && t.active) window.api.setActiveWc(wcId)
+  useEffect(() => {
+    const off = window.api.onTabEvent((ev) => {
+      const id = ev.id
+      const type = ev.type
+      if (type === 'dom-ready') {
         const z = settingsRef.current && settingsRef.current.defaultZoom
-        if (z && z !== 1) el.setZoomFactor(z)
-      } catch {}
-    })
-
-    el.addEventListener('did-navigate', (e) => {
-      const url = e.url
-      const internal = internalForSrc(url)
-      if (internal === 'error') {
-        update({ url: failedUrlRef.current.get(id) || errorPageOriginal(url), internal: 'error', title: 'No se puede acceder a este sitio' })
+        if (z && z !== 1) window.api.tabZoomSet(id, z)
+        const t = tabsRef.current.find((x) => x.id === id)
+        if (t && t.active && t.wcId) window.api.setActiveWc(t.wcId)
         return
       }
-      update({ url: internal ? '' : url, internal, error: null })
-      failedUrlRef.current.delete(id)
-      if (!internal && url.startsWith('http') && !isLoopback(url) && !incognitoRef.current) {
-        const t = tabsRef.current.find((x) => x.id === id)
-        window.api.addHistory({ url, title: (t && t.title) || url })
+      if (type === 'did-navigate') {
+        const url = ev.url
+        const internal = internalForSrc(url)
+        if (internal === 'error') {
+          setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, url: failedUrlRef.current.get(id) || errorPageOriginal(url), internal: 'error', title: 'No se puede acceder a este sitio' } : t)))
+          return
+        }
+        setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, url: internal ? '' : url, internal, error: null } : t)))
+        failedUrlRef.current.delete(id)
+        if (!internal && url && url.startsWith('http') && !isLoopback(url) && !incognitoRef.current) {
+          const t = tabsRef.current.find((x) => x.id === id)
+          window.api.addHistory({ url, title: (t && t.title) || url })
+        }
+        refreshNavState()
+        scheduleSessionSave()
+        return
       }
-      refreshNavState()
-      scheduleSessionSave()
-    })
-
-    el.addEventListener('did-fail-load', (e) => {
-      if (!e.isMainFrame) return
-      const code = e.errorCode
-      if (code === -3 || code === -320) return
-      const url = e.validatedURL || ''
-      if (!url) return
-      failedUrlRef.current.set(id, url)
-      update({ url, error: { code, desc: e.errorDescription || '', url }, title: 'No se puede acceder a este sitio' })
-      try {
-        el.loadURL('nixer://error?url=' + encodeURIComponent(url) + '&code=' + code + '&desc=' + encodeURIComponent(e.errorDescription || ''))
-      } catch {}
-    })
-
-    el.addEventListener('did-navigate-in-page', (e) => {
-      const internal = internalForSrc(e.url)
-      update({ url: internal ? '' : e.url, internal })
-    })
-
-    el.addEventListener('page-title-updated', (e) => {
-      if (e.title) {
-        update({ title: e.title })
-        try {
-          const u = e.url || el.getURL()
-          if (u && u.startsWith('http')) window.api.updateHistoryTitle(u, e.title)
-        } catch {}
+      if (type === 'did-fail-load') {
+        if (!ev.isMainFrame) return
+        refreshNavState()
+        if (ev.code === -3) return
+        const url = ev.url || ''
+        if (!url) return
+        failedUrlRef.current.set(id, url)
+        setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, url, error: { code: ev.code, desc: ev.desc || '', url }, title: 'No se puede acceder a este sitio' } : t)))
+        window.api.tabLoad(id, 'nixer://error?url=' + encodeURIComponent(url) + '&code=' + ev.code + '&desc=' + encodeURIComponent(ev.desc || ''))
+        return
       }
+      if (type === 'did-navigate-in-page') {
+        const internal = internalForSrc(ev.url)
+        setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, url: internal ? '' : ev.url, internal } : t)))
+        return
+      }
+      if (type === 'title') {
+        if (ev.title) {
+          setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, title: ev.title } : t)))
+          try {
+            const t = tabsRef.current.find((x) => x.id === id)
+            if (t && t.url && t.url.startsWith('http')) window.api.updateHistoryTitle(t.url, ev.title)
+          } catch {}
+        }
+        return
+      }
+      if (type === 'favicon') {
+        setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, favicon: ev.favicons && ev.favicons[0] ? ev.favicons[0] : null } : t)))
+        return
+      }
+      if (type === 'media-started') { setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, audible: true } : t))); return }
+      if (type === 'media-paused') { setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, audible: false } : t))); return }
+      if (type === 'loading') { refreshNavState(); return }
+      if (type === 'found-in-page') { setFindResult(ev.result); return }
+      if (type === 'render-gone') { setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, title: 'Pestaña no disponible' } : t))); return }
+      if (type === 'tab-closed') { removeTabState(id); return }
     })
+    return off
+  }, [])
 
-    el.addEventListener('page-favicon-updated', (e) => {
-      update({ favicon: e.favicons && e.favicons[0] ? e.favicons[0] : null })
-    })
-
-    el.addEventListener('media-started-playing', () => { update({ audible: true }) })
-    el.addEventListener('media-paused', () => { update({ audible: false }) })
-    try { el.setAudioMuted(!!(tabsRef.current.find((x) => x.id === id) || {}).muted) } catch {}
-
-    el.addEventListener('did-start-loading', () => refreshNavState())
-    el.addEventListener('did-stop-loading', () => refreshNavState())
-
-    el.addEventListener('found-in-page', (e) => {
-      setFindResult(e.result)
-    })
-
-    el.addEventListener('render-process-gone', () => {
-      update({ title: 'Pestaña no disponible' })
-    })
+  function syncTabLayout() {
+    if (window.__nixerDragging) return
+    const pc = document.querySelector('.page-container')
+    if (!pc) return
+    const r = pc.getBoundingClientRect()
+    if (!r.width || !r.height) return
+    const visible = []
+    const active = tabsRef.current.find((x) => x.active)
+    if (active && active.wcId) {
+      if (splitWith) {
+        const half = r.width / 2
+        const other = tabsRef.current.find((x) => x.id === splitWith)
+        if (other && other.wcId) {
+          visible.push({ id: other.id, rect: { x: r.x, y: r.y, width: half, height: r.height } })
+        }
+        visible.push({ id: active.id, rect: { x: r.x + half, y: r.y, width: half, height: r.height } })
+      } else {
+        visible.push({ id: active.id, rect: { x: r.x, y: r.y, width: r.width, height: r.height } })
+      }
+    }
+    window.api.tabsLayout({ visible })
   }
 
-  function newTabRecord({ url = '', src, internal, title, pinned = false, group = null, active = false } = {}) {
+  useEffect(() => {
+    tabs.forEach((t) => {
+      if (t.wcId || creatingRef.current.has(t.id)) return
+      creatingRef.current.add(t.id)
+      window.api.tabCreate({ id: t.id, src: t.src }).then((res) => {
+        creatingRef.current.delete(t.id)
+        if (!res || !res.wcId) return
+        setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, wcId: res.wcId } : x)))
+        if (tabsRef.current.find((x) => x.id === t.id && x.active)) window.api.setActiveWc(res.wcId)
+      }).catch(() => creatingRef.current.delete(t.id))
+    })
+  }, [tabs])
+
+  useEffect(() => {
+    const ids = new Set(tabs.map((t) => t.id))
+    prevTabIdsRef.current.forEach((id) => {
+      if (!ids.has(id)) window.api.tabClose(id)
+    })
+    prevTabIdsRef.current = ids
+  }, [tabs])
+
+  useEffect(() => {
+    function sync() { syncTabLayout() }
+    sync()
+    const pc = document.querySelector('.page-container')
+    let ro = null
+    if (pc && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(sync)
+      ro.observe(pc)
+    }
+    window.addEventListener('resize', sync)
+    function onDragEnd() { syncTabLayout() }
+    window.addEventListener('nixer-drag-end', onDragEnd)
+    return () => {
+      if (ro) ro.disconnect()
+      window.removeEventListener('resize', sync)
+      window.removeEventListener('nixer-drag-end', onDragEnd)
+    }
+  }, [tabs, splitWith])
+
+  // ---- Popups como ventanas nativas (la página nunca se oculta) --------------
+  useEffect(() => {
+    if (paletteOpen) {
+      const p = buildListPopup(true)
+      showAppPopup('palette-popup', { x: Math.round(window.innerWidth / 2 - 340), y: 70, width: 680, height: Math.min(480, window.innerHeight - 160), keepOpen: true, closeOnBlur: false }, p.payload)
+    } else {
+      hideAppPopup('palette-popup')
+    }
+  }, [paletteOpen, paletteQuery, paletteSel])
+
+  useEffect(() => {
+    if (tabSearchOpen) {
+      const p = buildListPopup(false)
+      showAppPopup('tabsearch-popup', { x: Math.round(window.innerWidth / 2 - 300), y: 80, width: 600, height: Math.min(420, window.innerHeight - 160), keepOpen: true, closeOnBlur: false }, p.payload)
+    } else {
+      hideAppPopup('tabsearch-popup')
+    }
+  }, [tabSearchOpen, tabSearchQuery, tabSearchSel, tabs])
+
+  useEffect(() => {
+    if (findOpen) {
+      window.api.showPopup({ key: 'find-popup', x: 20, y: 40, width: 380, height: 96, keepOpen: true, closeOnBlur: false, payload: { type: 'find', query: findQuery, result: findResult } })
+      popupKeysRef.current.add('find-popup')
+    } else {
+      hideAppPopup('find-popup')
+    }
+  }, [findOpen])
+
+  useEffect(() => {
+    if (toasts.length) {
+      showAppPopup('toasts-popup', { x: Math.round(window.innerWidth - 340), y: Math.round(window.innerHeight - 60 - toasts.length * 64), width: 320, height: Math.min(320, toasts.length * 64 + 20), focus: false, focusable: false, closeOnBlur: false }, { type: 'toasts', toasts: toasts.slice(-4) })
+    } else {
+      hideAppPopup('toasts-popup')
+    }
+  }, [toasts])
+
+  useEffect(() => {
+    if (modal && modal.type === 'confirm') {
+      dialogRef.current = modal
+      showAppPopup('dialog-popup', { x: Math.round(window.innerWidth / 2 - 220), y: Math.round(window.innerHeight / 2 - 90), width: 440, height: 180 }, { type: 'dialog', message: '<b>' + (modal.title || '') + '</b><br>' + (modal.message || ''), buttons: [{ label: modal.confirmLabel || 'Aceptar', value: 'ok', primary: true, danger: !!modal.danger }, { label: 'Cancelar', value: 'cancel' }] })
+    } else if (savePrompt) {
+      dialogRef.current = {
+        onConfirm: () => { window.api.savePassword(savePrompt); addToast('Contraseña guardada', 'ok') },
+        onCancel: () => {},
+      }
+      showAppPopup('dialog-popup', { x: Math.round(window.innerWidth / 2 - 220), y: Math.round(window.innerHeight / 2 - 80), width: 440, height: 170 }, { type: 'dialog', message: '¿Guardar la contraseña de <b>' + savePrompt.origin + '</b>?<br><span style="font-size:12px">Usuario: ' + savePrompt.username + '</span>', buttons: [{ label: 'Guardar', value: 'ok', primary: true }, { label: 'Ahora no', value: 'cancel' }] })
+    } else if (sessionPrompt) {
+      dialogRef.current = {
+        onConfirm: () => { const s = sessionPrompt; setSessionPrompt(null); restoreSessionTabs(s) },
+        onCancel: () => { setSessionPrompt(null); addTab() },
+      }
+      showAppPopup('dialog-popup', { x: Math.round(window.innerWidth / 2 - 220), y: Math.round(window.innerHeight / 2 - 80), width: 440, height: 170 }, { type: 'dialog', message: '¿Restaurar las <b>' + sessionPrompt.length + '</b> pestañas de la sesión anterior?', buttons: [{ label: 'Restaurar', value: 'ok', primary: true }, { label: 'Nueva pestaña', value: 'cancel' }] })
+    } else {
+      hideAppPopup('dialog-popup')
+    }
+  }, [modal, savePrompt, sessionPrompt])
+
+  useEffect(() => {
+    shieldsOriginRef.current = shieldsOrigin
+  }, [shieldsOrigin])
+
+  useEffect(() => {
+    siteInfoUrlRef.current = siteInfoUrl
+  }, [siteInfoUrl])
+
+  useEffect(() => {
+    if (shieldsOrigin) {
+      refreshShields()
+      const anchor = shieldsAnchor
+      const w = 340
+      const x = anchor ? Math.max(8, Math.round(anchor.right - w)) : 60
+      const y = anchor ? Math.round(anchor.bottom + 6) : 60
+      showAppPopup('shields-popup', { x, y, width: w, height: 250, keepOpen: true, closeOnBlur: false }, { type: 'shields', origin: shieldsOrigin, state: shieldsState, ads: 0, scripts: 0, trackers: 0 })
+    } else {
+      hideAppPopup('shields-popup')
+    }
+  }, [shieldsOrigin, shieldsAnchor, shieldsState])
+
+  useEffect(() => {
+    if (!siteInfoUrl) {
+      hideAppPopup('siteinfo-popup')
+      return
+    }
+    let origin = ''
+    try { origin = new URL(siteInfoUrl).origin } catch {}
+    const anchor = siteInfoAnchor
+    const w = 340
+    const x = anchor ? Math.max(8, Math.round(anchor.right - w)) : 60
+    const y = anchor ? Math.round(anchor.bottom + 6) : 60
+    const show = (kind, label) => showAppPopup('siteinfo-popup', { x, y, width: w, height: 210 }, { type: 'siteinfo', origin, kind, label })
+    if (window.api.certStatus) {
+      window.api.certStatus(origin).then((r) => {
+        if (r && r.secure) show('secure', 'Conexión segura (TLS)')
+        else if (r && r.error) show('insecure', 'Certificado no válido')
+        else show('insecure', 'Conexión no segura')
+      }).catch(() => show(siteInfoUrl.startsWith('https://') ? 'secure' : 'insecure', siteInfoUrl.startsWith('https://') ? 'Conexión segura' : 'Conexión no segura'))
+    } else {
+      show(siteInfoUrl.startsWith('https://') ? 'secure' : 'insecure', siteInfoUrl.startsWith('https://') ? 'Conexión segura' : 'Conexión no segura')
+    }
+  }, [siteInfoUrl, siteInfoAnchor])
+
+  function refreshTaskManager() {
+    window.api.taskManagerList().then((r) => {
+      taskRowsRef.current = (r && r.rows) || []
+      setTaskManagerTick((x) => x + 1)
+    }).catch(() => {})
+  }
+
+  useEffect(() => {
+    if (taskManagerOpen) {
+      refreshTaskManager()
+    } else {
+      hideAppPopup('taskmanager-popup')
+    }
+  }, [taskManagerOpen])
+
+  useEffect(() => {
+    if (!taskManagerOpen) return
+    const payload = { type: 'taskmanager', rows: taskRowsRef.current, total: taskManagerTotal() }
+    showAppPopup('taskmanager-popup', { x: Math.round(window.innerWidth / 2 - 300), y: 70, width: 620, height: 420, closeOnBlur: false, keepOpen: true }, payload)
+  }, [taskManagerTick, taskManagerOpen])
+
+  function taskManagerTotal() {
+    let total = 0
+    const seen = new Set()
+    taskRowsRef.current.forEach((r) => { if (r.id && !seen.has(r.id)) { seen.add(r.id); total += r.mem || 0 } })
+    return total
+  }
+
+  function newTabRecord({ url = '', src, internal, title, pinned = false, group = null, active = false, wcId = null } = {}) {
     const finalSrc = src || computeSrc(url)
     return {
       id: Date.now() + '-' + tabSeq++,
@@ -298,7 +565,7 @@ export default function App() {
       favicon: null,
       pinned,
       internal: internal || internalForSrc(finalSrc),
-      wcId: null,
+      wcId,
       active,
       group,
       audible: false,
@@ -307,7 +574,7 @@ export default function App() {
   }
 
   function addTab(url, opts = {}) {
-    const tab = newTabRecord({ url, src: opts.src, internal: opts.internal, title: opts.title, pinned: opts.pinned, group: opts.group })
+    const tab = newTabRecord({ url, src: opts.src, internal: opts.internal, title: opts.title, pinned: opts.pinned, group: opts.group, wcId: opts.wcId })
     setTabs((prev) => prev.map((t) => ({ ...t, active: false })).concat(tab))
     if (opts.activate !== false) {
       requestAnimationFrame(() => activate(tab.id))
@@ -320,11 +587,10 @@ export default function App() {
   function activate(id) {
     setTabs((prev) => prev.map((t) => ({ ...t, active: t.id === id })))
     requestAnimationFrame(() => {
-      const el = elsRef.current.get(id)
-      if (el) {
-        try { window.api.setActiveWc(el.getWebContentsId()) } catch {}
-      }
+      const t = tabsRef.current.find((x) => x.id === id)
+      if (t && t.wcId) window.api.setActiveWc(t.wcId)
       refreshNavState()
+      syncTabLayout()
     })
   }
 
@@ -332,13 +598,15 @@ export default function App() {
     activate(id)
   }
 
-  function closeTab(id) {
-    const idx = tabs.findIndex((t) => t.id === id)
-    const t = tabs[idx]
+  function removeTabState(id) {
+    const list = tabsRef.current
+    const idx = list.findIndex((t) => t.id === id)
+    const t = list[idx]
     if (!t) return
-    if (t.url && t.url.startsWith('http')) closedTabsRef.current.unshift({ url: t.url, title: t.title })
+    if (t.url && t.url.startsWith('http')) closedTabsRef.current.unshift({ id: 'ct' + Date.now() + '-' + closedTabsRef.current.length, url: t.url, title: t.title })
     if (closedTabsRef.current.length > 50) closedTabsRef.current.length = 50
     setClosedCount(closedTabsRef.current.length)
+    setClosedTabs([...closedTabsRef.current])
     failedUrlRef.current.delete(id)
     setTabs((prev) => {
       const next = prev.filter((x) => x.id !== id)
@@ -359,21 +627,16 @@ export default function App() {
     scheduleSessionSave()
   }
 
+  function closeTab(id) {
+    if (!id || !tabsRef.current.some((t) => t.id === id)) return
+    window.api.tabClose(id)
+  }
+
   function closeAllTabs() {
     if (settingsRef.current && settingsRef.current.confirmCloseMultiple !== false) {
       if (!window.confirm('¿Cerrar todas las pestañas?')) return
     }
-    tabs.forEach((t) => {
-      if (t.url && t.url.startsWith('http')) closedTabsRef.current.unshift({ url: t.url, title: t.title })
-    })
-    if (closedTabsRef.current.length > 50) closedTabsRef.current.length = 50
-    setClosedCount(closedTabsRef.current.length)
-    if (settingsRef.current && settingsRef.current.lastTabCloseAction === 'closeWindow') {
-      window.api.close()
-      return
-    }
-    setTabs([createTabObject()])
-    scheduleSessionSave()
+    tabs.forEach((t) => closeTab(t.id))
   }
 
   function toggleSplit(id) {
@@ -421,10 +684,7 @@ export default function App() {
     if (!t) return
     const next = !t.muted
     setTabs((prev) => prev.map((x) => (x.id === id ? { ...x, muted: next } : x)))
-    const el = elsRef.current.get(id)
-    if (el) {
-      try { el.setAudioMuted(next) } catch {}
-    }
+    window.api.tabMute(id, next)
   }
 
   function moveTabToWindow(id) {
@@ -441,18 +701,23 @@ export default function App() {
   function openExternal(url) {
     const t = tabs.find((x) => x.active)
     if (t && t.internal && !t.url && !t.pinned) {
-      const el = elsRef.current.get(t.id)
-      if (el) { try { el.loadURL(url) } catch {} }
+      addTab(url, { activate: true })
+      removeEmptyTab(t.id)
       return
     }
     addTab(url, { activate: !(settingsRef.current && settingsRef.current.openLinksInBackground) })
   }
 
+  function removeEmptyTab(id) {
+    setTabs((prev) => {
+      const next = prev.filter((x) => x.id !== id)
+      if (!next.length) return prev
+      return next
+    })
+  }
+
   function navigateTab(id, url) {
-    const el = elsRef.current.get(id)
-    if (el && url) {
-      try { el.loadURL(url) } catch {}
-    }
+    if (id && url) window.api.tabLoad(id, url)
   }
 
   function restoreAllTabs() {
@@ -461,19 +726,22 @@ export default function App() {
       if (t) addTab(t.url, { activate: false })
     }
     setClosedCount(0)
+    setClosedTabs([])
+  }
+
+  function restoreTabId(id) {
+    const i = closedTabsRef.current.findIndex((t) => t.id === id)
+    if (i < 0) return
+    const t = closedTabsRef.current.splice(i, 1)[0]
+    setClosedCount(closedTabsRef.current.length)
+    setClosedTabs([...closedTabsRef.current])
+    if (t) addTab(t.url)
   }
 
   function reloadAllTabs() {
-    setTabs((prev) => {
-      prev.forEach((t) => {
-        const el = elsRef.current.get(t.id)
-        if (!el) return
-        try {
-          if (t.error && t.error.url) el.loadURL(t.error.url)
-          else el.reload()
-        } catch {}
-      })
-      return prev
+    tabs.forEach((t) => {
+      if (t.error && t.error.url) window.api.tabLoad(t.id, t.error.url)
+      else window.api.tabReload(t.id, false)
     })
   }
 
@@ -503,30 +771,48 @@ export default function App() {
   function restoreTab() {
     const t = closedTabsRef.current.shift()
     setClosedCount(closedTabsRef.current.length)
+    setClosedTabs([...closedTabsRef.current])
     if (t) addTab(t.url)
   }
 
   function navigate(url) {
-    const el = activeEl()
-    if (el) {
-      try { el.loadURL(url) } catch {}
-    }
+    const id = activeTabId()
+    if (id && url) window.api.tabLoad(id, url)
   }
 
   function navAction(action) {
-    const el = activeEl()
-    if (!el) return
-    try {
-      if (action === 'goBack' && el.canGoBack()) el.goBack()
-      else if (action === 'goForward' && el.canGoForward()) el.goForward()
-      else if (action === 'reload') {
-        const t = activeTab
-        if (t && t.error && t.error.url) try { el.loadURL(t.error.url) } catch {}
-        else el.reload()
-      }
-      else if (action === 'stop') el.stop()
-    } catch {}
+    const id = activeTabId()
+    if (!id) return
+    if (action === 'goBack') window.api.tabBack(id)
+    else if (action === 'goForward') window.api.tabForward(id)
+    else if (action === 'reload') {
+      const t = activeTab
+      const retryUrl = (t && ((t.error && t.error.url) || (t.internal === 'error' && t.url))) || ''
+      if (retryUrl) window.api.tabLoad(id, retryUrl)
+      else window.api.tabReload(id, false)
+      scheduleReloadWatchdog(id, t)
+    }
+    else if (action === 'stop') window.api.tabStop(id)
     refreshNavState()
+  }
+
+  function scheduleReloadWatchdog(id, t) {
+    clearTimeout(reloadWatchRef.current)
+    if (!id || !t) return
+    reloadWatchRef.current = setTimeout(() => {
+      const tab = tabsRef.current.find((x) => x.id === t.id)
+      if (!tab || !tab.active) return
+      window.api.tabNavState(id).then((st) => {
+        if (!st || !st.isLoading) return
+        window.api.tabStop(id)
+        setTimeout(() => {
+          window.api.tabGetUrl(id).then((cur) => {
+            if (cur && cur !== 'about:blank') window.api.tabLoad(id, cur)
+            else window.api.tabReload(id, false)
+          }).catch(() => {})
+        }, 350)
+      }).catch(() => {})
+    }, 6000)
   }
 
   function openInternal(key) {
@@ -538,33 +824,53 @@ export default function App() {
   }
 
   function doFind(text, findNext) {
-    const el = activeEl()
-    if (!el) return
+    const id = activeTabId()
+    if (!id) return
     if (!text) {
-      try { el.stopFindInPage('clearSelection') } catch {}
+      window.api.tabStopFind(id, 'clearSelection')
       return
     }
-    try { el.findInPage(text, { findNext: !!findNext }) } catch {}
+    window.api.tabFind(id, text, !!findNext)
   }
 
   function stopFind() {
-    const el = activeEl()
-    if (el) {
-      try { el.stopFindInPage('clearSelection') } catch {}
-    }
+    const id = activeTabId()
+    if (id) window.api.tabStopFind(id, 'clearSelection')
     setFindResult(null)
   }
 
   function scheduleSessionSave() {
     if (incognitoRef.current) return
     clearTimeout(sessionTimerRef.current)
-    sessionTimerRef.current = setTimeout(() => {
-      setTabs((prev) => {
-        window.api.saveSession(prev.filter((t) => t.url && t.url.startsWith('http') && !isLoopback(t.url)).map((t) => ({ url: t.url, pinned: !!t.pinned, group: t.group ? t.group.id : undefined })))
-        return prev
-      })
-    }, 1500)
+    sessionTimerRef.current = setTimeout(saveSessionNow, 500)
   }
+
+  function saveSessionNow() {
+    if (incognitoRef.current) return
+    clearTimeout(sessionTimerRef.current)
+    sessionTimerRef.current = null
+    const list = tabsRef.current
+      .filter((t) => t.url && t.url.startsWith('http') && !isLoopback(t.url))
+      .map((t) => ({ url: t.url, pinned: !!t.pinned, group: t.group ? t.group.id : undefined }))
+    try { window.api.saveSession(list) } catch {}
+  }
+
+  async function restoreSessionTabs(sess) {
+    if (!sess || !sess.length) return
+    const groups = (await window.api.groups.get().catch(() => ({}))) || {}
+    sess.forEach((u) => addTab(u.url, { pinned: u.pinned, group: u.group ? groups[u.group] : undefined }))
+  }
+
+  useEffect(() => {
+    function flush() { saveSessionNow() }
+    window.addEventListener('pagehide', flush)
+    window.addEventListener('beforeunload', flush)
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush() })
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      window.removeEventListener('beforeunload', flush)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -586,14 +892,14 @@ export default function App() {
         const sess = await window.api.getSession()
         if (cancelled) return
         if (sess && sess.length && s.startupBehavior === 'restore') {
-          const groups = (await window.api.groups.get().catch(() => ({}))) || {}
-          sess.forEach((u) => addTab(u.url, { pinned: u.pinned, group: u.group ? groups[u.group] : undefined }))
-          const first = tabsRef.current[0]
-          if (first) setTimeout(() => activate(first.id), 150)
+          restoreSessionTabs(sess)
+        } else if (sess && sess.length && (w.initial || w.crash)) {
+          setSessionPrompt(sess)
         } else {
-          addTab()
+          if (!w.awaitingTab && tabsRef.current.length === 0) addTab()
         }
       } catch {}
+      window.api.downloadsList().then((list) => { if (!cancelled && Array.isArray(list)) setDownloads(list) }).catch(() => {})
     })()
     try {
       if (!localStorage.getItem('nixer-drag-hint-v2')) {
@@ -608,12 +914,192 @@ export default function App() {
       window.api.onSettings(setSettings),
       window.api.onDownloads(setDownloads),
       window.api.onMaximized(setMaximized),
-      window.api.onPermissionRequest((req) => setPermission(req)),
+      window.api.onPermissionRequest((req) => {
+        pendingPermitRef.current = req
+        if (!window.api.showPopup) { setPermission(req); return }
+        try {
+          const anchor = document.querySelector('.sec-chip, .shield-btn')
+          const r = anchor ? anchor.getBoundingClientRect() : null
+          const width = 320
+          const x = r ? Math.max(8, Math.round(r.right - width)) : Math.max(8, Math.round(window.innerWidth - width - 12))
+          const y = r ? Math.round(r.bottom + 6) : 60
+          window.api.showPopup({
+            key: 'permission-popup',
+            x,
+            y,
+            width,
+            height: 188,
+            closeOnBlur: false,
+            payload: {
+              type: 'permission',
+              id: req.id,
+              origin: req.origin,
+              permission: req.permission,
+              label: PERM_NAMES[req.permission] || req.permission,
+            },
+          })
+          popupOpenRef.current = 'permission-popup'
+        } catch { setPermission(req) }
+      }),
+      window.api.onPopupAction(({ key, data }) => {
+        if (popupOpenRef.current === key) popupOpenRef.current = null
+        if (key === 'permission-popup') {
+          let payload = null
+          try { payload = JSON.parse(data || '{}') } catch {}
+          const p = pendingPermitRef.current
+          if (p && payload && payload.mode) {
+            window.api.permissionResponse({ id: p.id, allow: payload.mode !== 'deny', remember: !!payload.remember, mode: payload.mode })
+          }
+          return
+        }
+        if (key === 'bookmark-popup') {
+          let payload = null
+          try { payload = JSON.parse(data || '{}') } catch {}
+          if (payload && payload.mode === 'save') {
+            const bm = pendingBookmarkRef.current
+            if (bm) window.api.addBookmark({ url: bm.url, title: payload.title || bm.title }).then(() => {
+              refreshBookmarks()
+              setBookmarked(true)
+              addToast('Marcador añadido', 'ok')
+            })
+          }
+          return
+        }
+        if (key === 'palette-popup' || key === 'tabsearch-popup') {
+          const isPalette = key === 'palette-popup'
+          let payload = null
+          try { payload = JSON.parse(data || '{}') } catch {}
+          if (!payload || !payload.t) return
+          if (payload.t === 'close') {
+            if (isPalette) setPaletteOpen(false)
+            else setTabSearchOpen(false)
+            return
+          }
+          if (payload.t === 'q') {
+            if (isPalette) setPaletteQuery(payload.v || '')
+            else setTabSearchQuery(payload.v || '')
+            if (window.api.updatePopup) window.api.updatePopup(key, buildListPopup(isPalette).payload)
+            return
+          }
+          if (payload.t === 'down' || payload.t === 'up') {
+            const d = payload.t === 'down' ? 1 : -1
+            if (isPalette) setPaletteSel((s) => s + d)
+            else setTabSearchSel((s) => s + d)
+            if (window.api.updatePopup) window.api.updatePopup(key, buildListPopup(isPalette).payload)
+            return
+          }
+          if (payload.t === 'pick' || payload.t === 'enter') {
+            const q = isPalette ? paletteQuery : tabSearchQuery
+            const items = isPalette ? paletteItems : tabSearchItems(q)
+            const sel = isPalette ? paletteSel : tabSearchSel
+            const it = items.filter((x) => !x.sep && (!q || (x.label + ' ' + (x.meta || '')).toLowerCase().includes(q.toLowerCase())))[payload.t === 'enter' ? sel : (payload.i || 0)]
+            if (isPalette) setPaletteOpen(false)
+            else setTabSearchOpen(false)
+            if (it) {
+              if (isPalette && it.action) it.action()
+              else if (!isPalette && it.id) switchTab(it.id)
+            }
+          }
+          return
+        }
+        if (key === 'find-popup') {
+          let payload = null
+          try { payload = JSON.parse(data || '{}') } catch {}
+          if (!payload || !payload.t) return
+          if (payload.t === 'close') { stopFind(); setFindOpen(false); return }
+          if (payload.t === 'q') { setFindQuery(payload.v || ''); doFind(payload.v || '', false); return }
+          if (payload.t === 'next') doFind(findQuery, true)
+          if (payload.t === 'prev') doFind(findQuery, true)
+          return
+        }
+        if (key === 'dialog-popup') {
+          let payload = null
+          try { payload = JSON.parse(data || '{}') } catch {}
+          if (!payload || payload.t !== 'btn') return
+          const dlg = dialogRef.current
+          if (dlg && payload.v === 'ok' && dlg.onConfirm) dlg.onConfirm()
+          else if (dlg && dlg.onCancel) dlg.onCancel()
+          dialogRef.current = null
+          return
+        }
+        if (key === 'shields-popup') {
+          let payload = null
+          try { payload = JSON.parse(data || '{}') } catch {}
+          if (!payload || !payload.t) return
+          const origin = shieldsOriginRef.current
+          if (payload.t === 'toggle' && origin && payload.k) {
+            const s = shieldsStateRef.current || {}
+            const patch = {}
+            patch[payload.k] = !s[payload.k]
+            const next = Object.assign({}, s, patch)
+            shieldsStateRef.current = next
+            setShieldsState(next)
+            if (window.api.updatePopup) window.api.updatePopup('shields-popup', { type: 'shields', origin, state: next, ads: 0, scripts: 0, trackers: 0 })
+            window.api.shieldsSet(origin, patch).then(() => { refreshShields() })
+          }
+          if (payload.t === 'clear' && origin) {
+            window.api.siteClear(origin).then(() => addToast('Datos del sitio eliminados', 'ok'))
+          }
+          return
+        }
+        if (key === 'siteinfo-popup') {
+          let payload = null
+          try { payload = JSON.parse(data || '{}') } catch {}
+          if (!payload || !payload.t) return
+          if (payload.t === 'copy') {
+            const t = activeTab
+            if (t && t.url) copyText(t.url)
+          }
+          if (payload.t === 'clear' && siteInfoUrlRef.current) {
+            window.api.siteClear(new URL(siteInfoUrlRef.current).origin).then(() => addToast('Cookies y datos eliminados', 'ok'))
+          }
+          return
+        }
+        if (key === 'taskmanager-popup') {
+          let payload = null
+          try { payload = JSON.parse(data || '{}') } catch {}
+          if (payload && payload.t === 'close') { setTaskManagerOpen(false); return }
+          if (payload && payload.t === 'kill' && taskRowsRef.current[payload.i]) {
+            const wcId = taskRowsRef.current[payload.i].id
+            const t = tabsRef.current.find((x) => x.wcId === Number(wcId))
+            if (t) { window.api.tabCloseForce(t.id); removeTabState(t.id) }
+            refreshTaskManager()
+          }
+          return
+        }
+      }),
+      window.api.onPopupClosed((key) => {
+        if (popupOpenRef.current === 'bookmark-popup' && !bookmarkSelfClosedRef.current) {
+          bookmarkSuppressRef.current = true
+          clearTimeout(bookmarkTimerRef.current)
+          bookmarkTimerRef.current = setTimeout(() => { bookmarkSuppressRef.current = false }, 400)
+        }
+        bookmarkSelfClosedRef.current = false
+        popupOpenRef.current = null
+        if (key) popupKeysRef.current.delete(key)
+        // Si el popup se cerró por fuera (clic externo), el estado de la UI debe
+        // volver a su valor inicial para que el atajo pueda volver a abrirlo.
+        if (key === 'taskmanager-popup') setTaskManagerOpen(false)
+        else if (key === 'palette-popup') setPaletteOpen(false)
+        else if (key === 'find-popup') setFindOpen(false)
+        else if (key === 'tabsearch-popup') setTabSearchOpen(false)
+        else if (key === 'shields-popup') { setShieldsOrigin(null); setShieldsAnchor(null) }
+        else if (key === 'siteinfo-popup') { setSiteInfoUrl(null); setSiteInfoAnchor(null) }
+        else if (key === 'dialog-popup') { setModal((m) => (m && m.type === 'confirm' ? null : m)); setSavePrompt(null); setSessionPrompt(null) }
+      }),
       window.api.onSavePasswordPrompt((cred) => setSavePrompt(cred)),
       window.api.onUi((action, data) => {
         if (action === 'new-tab') addTab()
         else if (action === 'open-tab') openExternal(data)
         else if (action === 'open-tab-bg') addTab(data, { activate: false })
+        else if (action === 'tab-adopted') {
+          const d = data
+          if (d && d.id) {
+            const existing = tabsRef.current.find((x) => x.id === d.id)
+            if (existing) activate(existing.id)
+            else addTab(d.url || '', { src: d.url || '', internal: d.url ? internalForSrc(d.url) : null, title: d.title || '', wcId: d.wcId, activate: true })
+          }
+        }
         else if (action === 'close-tab') closeTab(activeTab ? activeTab.id : null)
         else if (action === 'restore-tab') restoreTab()
         else if (action === 'cycle-tab') cycleTab(data)
@@ -621,10 +1107,12 @@ export default function App() {
         else if (action === 'open-reader') addTab('', { src: 'nixer://reader?id=' + data, internal: 'reader', title: 'Modo lectura' })
         else if (action === 'open-find') setFindOpen(true)
         else if (action === 'open-palette') setPaletteOpen(true)
+        else if (action === 'toggle-ai') setAiOpen((o) => !o)
         else if (action === 'focus-address') setFocusSignal((s) => s + 1)
         else if (action === 'drag-highlight') window.dispatchEvent(new CustomEvent('nixer-drag-highlight', { detail: !!data }))
-        else if (action === 'open-taskmanager') setTaskManagerOpen(true)
+        else if (action === 'open-taskmanager') setTaskManagerOpen((o) => !o)
         else if (action === 'home') home()
+        else if (action === 'reload') navAction('reload')
         else if (action === 'bookmark-page') onStar()
         else if (action === 'activate-tab') {
           const t = tabsRef.current.find((x) => x.wcId === Number(data))
@@ -632,10 +1120,14 @@ export default function App() {
         }
         else if (action === 'close-tab-by-wc') {
           const t = tabsRef.current.find((x) => x.wcId === Number(data))
-          if (t) closeTab(t.id)
+          if (t) { window.api.tabCloseForce(t.id); removeTabState(t.id) }
         }
         else if (action === 'ui-toast') {
           addToast(data && data.text, data && data.kind)
+        }
+        else if (action === 'profiles-changed') {
+          refreshBookmarks()
+          window.api.getSettings().then((st) => setSettings(st)).catch(() => {})
         }
         else if (action === 'copy-url') {
           const t = tabsRef.current.find((x) => x.active)
@@ -653,10 +1145,8 @@ export default function App() {
           if (t) activate(t.id)
         }
         else if (action === 'toggle-mute') {
-          const el = elsRef.current.get(activeTab && activeTab.id)
-          if (el) {
-            try { el.setAudioMuted(el.isAudioMuted ? !el.isAudioMuted() : true) } catch {}
-          }
+          const t = activeTab
+          if (t) window.api.tabMute(t.id, !t.muted)
         }
         else if (action === 'bookmark-all') {
           bookmarkAllTabs()
@@ -674,7 +1164,7 @@ export default function App() {
           if (t) moveTab(t.id, Number(data))
         }
         else if (action === 'close-tab-by-id') {
-          closeTab(String(data))
+          removeTabState(String(data))
         }
         else if (action === 'translate-page') {
           const t = tabsRef.current.find((x) => x.active)
@@ -709,6 +1199,7 @@ export default function App() {
         }
       }),
     ]
+    window.api.uiReady && window.api.uiReady()
     return () => { offs.forEach((off) => off && off()) }
   }, [tabs, activeTab, settings])
 
@@ -720,6 +1211,31 @@ export default function App() {
       setBookmarked(false)
     }
   }, [tabs])
+
+  useEffect(() => {
+    if (!shieldsOrigin && !siteInfoUrl) return
+    function close(e) {
+      if (e.target.closest && e.target.closest('.popup-card, .shield-btn, .sec-chip')) return
+      setShieldsOrigin(null)
+      setShieldsAnchor(null)
+      setSiteInfoUrl(null)
+      setSiteInfoAnchor(null)
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') {
+        setShieldsOrigin(null)
+        setShieldsAnchor(null)
+        setSiteInfoUrl(null)
+        setSiteInfoAnchor(null)
+      }
+    }
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [shieldsOrigin, siteInfoUrl])
 
   useEffect(() => {
     const apply = () => {
@@ -742,7 +1258,7 @@ export default function App() {
       root.classList.toggle('tabs-square', s.tabShape === 'square')
       root.style.setProperty('--ui-font-scale', (s.uiFontScale || 100) / 100)
       root.style.setProperty('--toolbar-font-size', (s.toolbarFontSize || 13) + 'px')
-      root.style.setProperty('--tab-min-width', (s.tabMinWidth || 120) + 'px')
+      root.style.setProperty('--tab-min-width', (s.tabMinWidth || 72) + 'px')
       if (s.uiBackground) root.style.setProperty('--bg0', s.uiBackground)
       else root.style.removeProperty('--bg0')
     }
@@ -811,7 +1327,7 @@ export default function App() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2800)
   }
 
-  function onStar() {
+  function onStar(btn) {
     if (!activeTab || !activeTab.url) return
     if (bookmarked) {
       const bm = bookmarks.find((b) => b.url === activeTab.url)
@@ -823,7 +1339,33 @@ export default function App() {
         })
       }
     } else {
-      setModal({ type: 'bookmark', url: activeTab.url, title: activeTab.title })
+      if (bookmarkSuppressRef.current) {
+        bookmarkSuppressRef.current = false
+        clearTimeout(bookmarkTimerRef.current)
+        return
+      }
+      if (window.api.showPopup && popupOpenRef.current !== 'bookmark-popup') {
+        pendingBookmarkRef.current = { url: activeTab.url, title: activeTab.title }
+        const r = (btn && btn.getBoundingClientRect) ? btn.getBoundingClientRect() : null
+        const width = 340
+        const x = r ? Math.max(8, Math.round(r.right - width)) : Math.max(8, Math.round(window.innerWidth - width - 12))
+        const y = r ? Math.round(r.bottom + 6) : 60
+        window.api.showPopup({
+          key: 'bookmark-popup',
+          x,
+          y,
+          width,
+          height: 206,
+          payload: { type: 'bookmark', url: activeTab.url, title: activeTab.title },
+        })
+        popupOpenRef.current = 'bookmark-popup'
+      } else if (window.api.showPopup && popupOpenRef.current === 'bookmark-popup') {
+        bookmarkSelfClosedRef.current = true
+        window.api.hidePopup('bookmark-popup')
+        popupOpenRef.current = null
+      } else {
+        setModal({ type: 'bookmark', url: activeTab.url, title: activeTab.title })
+      }
     }
   }
 
@@ -883,26 +1425,25 @@ export default function App() {
   const MEDIA_KEYS = { mediaPlayPause: ' ', mediaSeekBack: 'j', mediaSeekFwd: 'l', mediaVolUp: 'ArrowUp', mediaVolDown: 'ArrowDown' }
 
   function pointerTarget(x, y) {
-    const el = activeEl()
-    if (el) {
+    const id = activeTabId()
+    const pc = document.querySelector('.page-container')
+    if (id && pc) {
       try {
-        const r = el.getBoundingClientRect()
+        const r = pc.getBoundingClientRect()
         if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
-          return { target: 'webview', el, x: x - r.left, y: y - r.top }
+          return { target: 'webview', id, x: x - r.left, y: y - r.top }
         }
       } catch {}
     }
     return { target: 'chrome' }
   }
 
-  function sendWebMouse(el, x, y, action, opts) {
+  function sendWebMouse(id, x, y, action, opts) {
     opts = opts || {}
     const pt = { x: Math.round(x), y: Math.round(y) }
-    try {
-      if (action === 'move') el.sendInputEvent({ type: 'mouseMove', ...pt, movementX: 0, movementY: 0, button: opts.button || 'left', buttons: opts.buttons || 0 })
-      else if (action === 'down') el.sendInputEvent({ type: 'mouseDown', ...pt, button: opts.button || 'left', clickCount: opts.count || 1 })
-      else if (action === 'up') el.sendInputEvent({ type: 'mouseUp', ...pt, button: opts.button || 'left', clickCount: opts.count || 1 })
-    } catch {}
+    if (action === 'move') window.api.tabInput(id, { type: 'mouseMove', ...pt, movementX: 0, movementY: 0, button: opts.button || 'left', buttons: opts.buttons || 0 })
+    else if (action === 'down') window.api.tabInput(id, { type: 'mouseDown', ...pt, button: opts.button || 'left', clickCount: opts.count || 1 })
+    else if (action === 'up') window.api.tabInput(id, { type: 'mouseUp', ...pt, button: opts.button || 'left', clickCount: opts.count || 1 })
   }
 
   function sendChromeMouse(type, x, y, opts) {
@@ -924,8 +1465,8 @@ export default function App() {
   function doPointerClick(x, y, button, count) {
     const t = pointerTarget(x, y)
     if (t.target === 'webview') {
-      sendWebMouse(t.el, t.x, t.y, 'down', { button, count })
-      sendWebMouse(t.el, t.x, t.y, 'up', { button, count })
+      sendWebMouse(t.id, t.x, t.y, 'down', { button, count })
+      sendWebMouse(t.id, t.x, t.y, 'up', { button, count })
     } else {
       if (count > 1) {
         sendChromeMouse('down', x, y, { button })
@@ -941,9 +1482,7 @@ export default function App() {
     if (!c) return
     const t = pointerTarget(c.x, c.y)
     if (t.target === 'webview') {
-      try {
-        t.el.sendInputEvent({ type: 'mouseWheel', x: Math.round(t.x), y: Math.round(t.y), deltaX: Math.round(dx), deltaY: Math.round(dy) })
-      } catch {}
+      window.api.tabInput(t.id, { type: 'mouseWheel', x: Math.round(t.x), y: Math.round(t.y), deltaX: Math.round(dx), deltaY: Math.round(dy) })
     } else {
       sendChromeMouse('wheel', c.x, c.y, { deltaX: dx, deltaY: dy })
     }
@@ -952,8 +1491,8 @@ export default function App() {
   function dragMove(x, y, down) {
     const t = pointerTarget(x, y)
     if (t.target === 'webview') {
-      if (down) sendWebMouse(t.el, t.x, t.y, 'down', { button: 'left', count: 1 })
-      else sendWebMouse(t.el, t.x, t.y, 'up', { button: 'left', count: 1 })
+      if (down) sendWebMouse(t.id, t.x, t.y, 'down', { button: 'left', count: 1 })
+      else sendWebMouse(t.id, t.x, t.y, 'up', { button: 'left', count: 1 })
     } else {
       if (down) sendChromeMouse('down', x, y, { button: 'left' })
       else sendChromeMouse('up', x, y, { button: 'left' })
@@ -961,13 +1500,11 @@ export default function App() {
   }
 
   function sendKey(code) {
-    const el = activeEl()
-    if (!el) return
-    try {
-      const kc = code.length === 1 && /[a-z]/.test(code) ? code.toUpperCase() : code
-      el.sendInputEvent({ type: 'keyDown', keyCode: kc })
-      el.sendInputEvent({ type: 'keyUp', keyCode: kc })
-    } catch {}
+    const id = activeTabId()
+    if (!id) return
+    const kc = code.length === 1 && /[a-z]/.test(code) ? code.toUpperCase() : code
+    window.api.tabInput(id, { type: 'keyDown', keyCode: kc })
+    window.api.tabInput(id, { type: 'keyUp', keyCode: kc })
   }
 
   function synthKey(key) {
@@ -979,12 +1516,11 @@ export default function App() {
   }
 
   function zoomStep(dir) {
-    const el = activeEl()
-    if (!el) return
-    try {
-      const z = el.getZoomFactor ? el.getZoomFactor() : 1
-      el.setZoomFactor(Math.min(3, Math.max(0.25, (z || 1) + dir * 0.1)))
-    } catch {}
+    const id = activeTabId()
+    if (!id) return
+    window.api.tabZoomGet(id).then((z) => {
+      window.api.tabZoomSet(id, Math.min(3, Math.max(0.25, (z || 1) + dir * 0.1)))
+    }).catch(() => {})
   }
 
   function tabStep(dir) {
@@ -1032,7 +1568,7 @@ export default function App() {
     const ae = document.activeElement
     const isChromeField = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)
     if (isChromeField) typeIntoChrome(ae, key)
-    else typeIntoWebview(activeEl(), key)
+    else typeIntoWebview(activeTabId(), key)
     rumble(20, 0.2, 0.2)
   }
 
@@ -1049,12 +1585,13 @@ export default function App() {
   }
 
   function enterHints() {
-    const el = activeEl()
-    if (!el) return
-    el.executeJavaScript(HINT_COLLECT)
+    const id = activeTabId()
+    if (!id) return
+    window.api.tabExecute(id, HINT_COLLECT)
       .then((points) => {
         if (!Array.isArray(points) || !points.length) { addToast('No hay enlaces visibles', 'info'); return }
-        const r = el.getBoundingClientRect()
+        const pc = document.querySelector('.page-container')
+        const r = (pc || document.body).getBoundingClientRect()
         const labels = hintLabels(points.length)
         setHints(points.map((p, i) => ({ label: labels[i], x: r.left + p.x, y: r.top + p.y, xv: p.x, yv: p.y })))
         setHintSel(0)
@@ -1074,11 +1611,11 @@ export default function App() {
   }
 
   function activateHint() {
-    const el = activeEl()
+    const id = activeTabId()
     const h = hints[hintSel]
-    if (!el || !h) { exitHints(); return }
-    sendWebMouse(el, h.xv, h.yv, 'down', { button: 'left', count: 1 })
-    sendWebMouse(el, h.xv, h.yv, 'up', { button: 'left', count: 1 })
+    if (!id || !h) { exitHints(); return }
+    sendWebMouse(id, h.xv, h.yv, 'down', { button: 'left', count: 1 })
+    sendWebMouse(id, h.xv, h.yv, 'up', { button: 'left', count: 1 })
     rumble(30, 0.3, 0.3)
     exitHints()
   }
@@ -1090,11 +1627,11 @@ export default function App() {
       case 'pointer': {
         if (dragRef.current) {
           const t = pointerTarget(ev.x, ev.y)
-          if (t.target === 'webview') sendWebMouse(t.el, t.x, t.y, 'move', { buttons: 1 })
+          if (t.target === 'webview') sendWebMouse(t.id, t.x, t.y, 'move', { buttons: 1 })
           else sendChromeMouse('move', ev.x, ev.y, { buttons: 1 })
         } else if (tvMode) {
           const t = pointerTarget(ev.x, ev.y)
-          if (t.target === 'webview') sendWebMouse(t.el, t.x, t.y, 'move', { buttons: 0 })
+          if (t.target === 'webview') sendWebMouse(t.id, t.x, t.y, 'move', { buttons: 0 })
           else sendChromeMouse('move', ev.x, ev.y, { buttons: 0 })
         }
         break
@@ -1218,7 +1755,7 @@ export default function App() {
     downloads: () => openInternal('downloads'),
     bookmarks: () => openInternal('bookmarks'),
     settings: () => openInternal('settings'),
-    ai: () => openInternal('ai'),
+    ai: () => setAiOpen((o) => !o),
     find: () => setFindOpen(true),
     fullscreen: () => window.api.toggleFullscreen(),
     theme: toggleTheme,
@@ -1260,6 +1797,7 @@ export default function App() {
         action: () => switchTab(t.id),
       })),
   ]
+  paletteItemsRef.current = paletteItems
 
   return (
     <div className={'app' + (presentation ? ' presentation' : '') + (tvMode ? ' tv-mode' : '') + (tvMode && tvIdle ? ' tv-idle' : '')} onDoubleClick={handleDblClick} onWheel={handleWheel}>
@@ -1277,7 +1815,9 @@ export default function App() {
           onMoveWindow={moveTabToWindow}
           onNewWindowUrl={openInNewWindow}
           closedCount={closedCount}
+          closedTabs={closedTabs}
           onRestoreAll={restoreAllTabs}
+          onRestoreId={restoreTabId}
           onReloadAll={reloadAllTabs}
           onNavigateTab={navigateTab}
           onRename={renameTab}
@@ -1285,6 +1825,7 @@ export default function App() {
           onCloseLeft={closeTabsLeft}
           onDetach={moveTabToWindow}
           windowId={windowIdRef.current}
+          onOverlayChange={overlaySource}
           onPin={(id) => setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t)))}
           onNewUrl={(url) => addTab(url)}
           onRestore={() => restoreTab()}
@@ -1307,6 +1848,7 @@ export default function App() {
             onNavigate={navigate}
             onRemove={confirmRemoveBookmark}
             onNewUrl={(url) => addTab(url)}
+            onOverlayChange={overlaySource}
             onAdd={(url, title) => window.api.addBookmark({ url, title }).then(() => { refreshBookmarks(); addToast('Marcador añadido', 'ok') })}
             onReorder={(ids) => {
               setBookmarks((prev) => {
@@ -1324,18 +1866,26 @@ export default function App() {
           focusSignal={focusSignal}
           bookmarked={bookmarked}
           inProgressCount={inProgress}
+          downloads={downloads}
           onNavigate={navigate}
           onNavAction={navAction}
           onToggleBookmark={onStar}
           onOpenPage={openInternal}
           onOpenPalette={() => setPaletteOpen(true)}
+          onOverlayChange={overlaySource}
           onShields={(btn) => {
             if (!(activeTab && activeTab.url && activeTab.url.startsWith('http'))) return
+            if (shieldsOrigin) { setShieldsOrigin(null); setShieldsAnchor(null); return }
+            setSiteInfoUrl(null)
+            setSiteInfoAnchor(null)
             setShieldsAnchor(btn ? btn.getBoundingClientRect() : null)
             try { setShieldsOrigin(new URL(activeTab.url).origin) } catch { setShieldsOrigin(activeTab.url) }
           }}
           onSiteInfo={(btn) => {
             if (!(activeTab && activeTab.url)) return
+            if (siteInfoUrl) { setSiteInfoUrl(null); setSiteInfoAnchor(null); return }
+            setShieldsOrigin(null)
+            setShieldsAnchor(null)
             setSiteInfoAnchor(btn ? btn.getBoundingClientRect() : null)
             setSiteInfoUrl(activeTab.url)
           }}
@@ -1348,6 +1898,8 @@ export default function App() {
           sidebarActive={!!sidebar}
           tvMode={tvMode}
           onToggleTv={toggleTvMode}
+          aiOpen={aiOpen}
+          onToggleAi={() => setAiOpen((o) => !o)}
         />
       </div>
 
@@ -1360,85 +1912,24 @@ export default function App() {
             onClose={() => setSidebar(null)}
           />
         )}
-      <div className={'page-container' + (splitWith ? ' splitscreen' : '')}>
-        {ready && tabs.map((t) => (
-          <webview
-            key={t.id}
-            ref={(el) => {
-              if (el) {
-                elsRef.current.set(t.id, el)
-                attach(el, t.id)
-              } else {
-                elsRef.current.delete(t.id)
-              }
-            }}
-            src={t.src}
-            partition={incognitoRef.current ? (viewInfoRef.current.privatePartition || 'navegador-incognito') : undefined}
-            preload={viewInfoRef.current.preload || undefined}
-            className={'page-view' + (t.active ? ' active' : '') + (splitWith === t.id ? ' split-on' : '')}
-          />
-        ))}
+      <div className={'page-container' + (splitWith ? ' splitscreen' : '') + (aiOpen ? ' ai-open' : '')}>
         {splitWith && (
           <button className="split-exit" title="Salir de la vista dividida" onClick={() => setSplitWith(null)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         )}
-        {statusUrl && (
-          <div className="status-bar" title={statusUrl}>{statusUrl}</div>
-        )}
       </div>
+      {aiOpen && (
+        <AIPanel tabs={tabs} onClose={() => setAiOpen(false)} onOpenLink={(url) => openExternal(url)} />
+      )}
       </div>
 
-      {tabSearchOpen && (() => {
-        const q = tabSearchQuery.toLowerCase()
-        const list = tabs.filter((t) => !q || ((t.title || '') + ' ' + (t.url || '')).toLowerCase().includes(q))
-        return (
-          <div className="tab-search-overlay" onClick={(e) => { if (e.target === e.currentTarget) setTabSearchOpen(false) }}>
-            <div className="tab-search-box">
-              <input autoFocus value={tabSearchQuery} onChange={(e) => setTabSearchQuery(e.target.value)} placeholder="Buscar pestaña…"
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setTabSearchOpen(false)
-                  if (e.key === 'Enter' && list[0]) { switchTab(list[0].id); setTabSearchOpen(false) }
-                }} />
-              <div className="tab-search-list">
-                {list.slice(0, 20).map((t) => (
-                  <div key={t.id} className={'ts-item' + (t.active ? ' active' : '')} onClick={() => { switchTab(t.id); setTabSearchOpen(false) }}>
-                    <span className="ts-title">{t.title || 'Nueva pestaña'}</span>
-                    <span className="ts-url">{t.url || ''}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
-      {shieldsOrigin && <ShieldsPopup origin={shieldsOrigin} anchor={shieldsAnchor} onClose={() => { setShieldsOrigin(null); setShieldsAnchor(null) }} />}
-      {siteInfoUrl && <SiteInfoPopup url={siteInfoUrl} anchor={siteInfoAnchor} onClose={() => { setSiteInfoUrl(null); setSiteInfoAnchor(null) }} />}
-      {taskManagerOpen && <TaskManager onClose={() => setTaskManagerOpen(false)} onKill={(wcId) => closeTabByWc(wcId)} />}
       {permission && (
         <PermissionModal
           request={permission}
           onClose={() => { window.api.permissionResponse({ id: permission.id, allow: false, remember: false }); setPermission(null) }}
         />
       )}
-      {savePrompt && (
-        <Modal
-          title="Guardar contraseña"
-          onClose={() => setSavePrompt(null)}
-          footer={
-            <>
-              <button className="btn" onClick={() => setSavePrompt(null)}>Ahora no</button>
-              <button className="btn primary" onClick={() => { window.api.savePassword(savePrompt); setSavePrompt(null); addToast('Contraseña guardada', 'ok') }}>Guardar</button>
-            </>
-          }
-        >
-          <p className="modal-msg">¿Guardar la contraseña de <b>{savePrompt.origin}</b>?</p>
-          <div className="modal-url">Usuario: {savePrompt.username}</div>
-        </Modal>
-      )}
-      {findOpen && <FindBar result={findResult} onFind={doFind} onStop={stopFind} onClose={() => { stopFind(); setFindOpen(false) }} />}
-      <Palette open={paletteOpen} items={paletteItems} onClose={() => setPaletteOpen(false)} />
       {modal && modal.type === 'bookmark' && (
         <BookmarkModal
           url={modal.url}
@@ -1447,7 +1938,7 @@ export default function App() {
           onCancel={() => setModal(null)}
         />
       )}
-      {modal && modal.type === 'confirm' && (
+      {modal && modal.type === 'confirm' && !window.api.showPopup && (
         <ConfirmModal
           title={modal.title}
           message={modal.message}
@@ -1457,7 +1948,6 @@ export default function App() {
           onCancel={() => setModal(null)}
         />
       )}
-      <Toasts toasts={toasts} />
       {tvMode && (
         <GamepadHud
           connected={gpConnected}
@@ -1476,34 +1966,37 @@ export default function App() {
 
   function closeTabByWc(wcId) {
     const t = tabs.find((x) => x.wcId === Number(wcId))
-    if (t) closeTab(t.id)
+    if (t) { window.api.tabCloseForce(t.id); removeTabState(t.id) }
   }
 }
 
 function PermissionModal({ request, onClose }) {
   const [remember, setRemember] = useState(false)
-  function respond(allow) {
-    window.api.permissionResponse({ id: request.id, allow, remember })
+  function respond(mode) {
+    window.api.permissionResponse({ id: request.id, allow: mode !== 'deny', remember, mode })
     onClose()
   }
+  const name = PERM_NAMES[request.permission] || request.permission
   return (
     <Modal
       title="Permiso solicitado"
       onClose={onClose}
       footer={
         <>
-          <button className="btn" onClick={() => respond(false)}>Bloquear</button>
-          <button className="btn primary" onClick={() => respond(true)}>Permitir</button>
+          <button className="btn" onClick={() => respond('deny')}>Bloquear</button>
+          <button className="btn" onClick={() => respond('once')}>Permitir una vez</button>
+          <button className="btn primary" onClick={() => respond('allow')}>Permitir</button>
         </>
       }
     >
       <p className="modal-msg">
-        <b>{request.origin}</b> quiere usar: <b>{PERM_NAMES[request.permission] || request.permission}</b>
+        <b>{request.origin}</b> quiere usar: <b>{name}</b>
       </p>
       <label className="perm-remember">
         <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
         Recordar mi decisión para este sitio
       </label>
+      <div className="modal-url">{remember ? 'Se aplicará siempre que visites este sitio.' : 'Se aplicará solo a esta petición o mientras la pestaña siga abierta.'}</div>
     </Modal>
   )
 }

@@ -5,7 +5,7 @@ const { currentCtx, sendUi } = require('./ctx')
 const { broadcastDownloads } = require('./util')
 const { installExtensionFromStore } = require('./extensions')
 
-const pendingSaveUrls = new Map()
+const pendingSaveUrls = [] // FIFO: { filePath, url, ts }
 const activeItems = new Map()
 let dlSeq = 1
 
@@ -22,15 +22,11 @@ function initDownloads() {
       })
       return
     }
-    const forced = pendingSaveUrls.get(url)
+    const forced = takePendingSavePath(url, item.getFilename())
     if (forced) {
       item.setSavePath(forced)
-      pendingSaveUrls.delete(url)
     } else if (store.settings().askDownloadLocation) {
-      const win = BrowserWindow.getFocusedWindow()
-      const opts = { defaultPath: path.join(app.getPath('downloads'), item.getFilename()), filters: [{ name: 'Archivo', extensions: ['*'] }] }
-      const res = dialog.showSaveDialogSync(win, opts)
-      if (res && res.filePath) item.setSavePath(res.filePath)
+      item.setSaveDialogOptions({ defaultPath: path.join(app.getPath('downloads'), item.getFilename()), filters: [{ name: 'Archivo', extensions: ['*'] }] })
     }
     const rec = {
       id: Date.now() + '-' + (dlSeq++),
@@ -98,8 +94,30 @@ async function saveAsUrl(win, url) {
     filters: [{ name: 'Todos los archivos', extensions: ['*'] }],
   })
   if (canceled || !filePath) return
-  pendingSaveUrls.set(url, filePath)
+  pendingSaveUrls.push({ filePath, url, ts: Date.now() })
   session.defaultSession.downloadURL(url)
+}
+
+// Consume la ruta elegida en "Guardar enlace como…" aunque el servidor redirija
+// la descarga (entonces item.getURL() difiere de la URL pedida y no habría match
+// exacto). Si no hay una petición de guardado reciente, devuelve null.
+function takePendingSavePath(url, filename) {
+  const now = Date.now()
+  for (let i = 0; i < pendingSaveUrls.length; i++) {
+    const p = pendingSaveUrls[i]
+    if (now - p.ts > 5000) {
+      pendingSaveUrls.splice(i, 1)
+      i--
+      continue
+    }
+    const sameUrl = p.url === url
+    const sameFile = filename && decodeURIComponent((p.url.split('/').pop().split('?')[0] || '')) === filename
+    if (sameUrl || sameFile) {
+      pendingSaveUrls.splice(i, 1)
+      return p.filePath
+    }
+  }
+  return null
 }
 
 module.exports = { initDownloads, savePageOf, saveAsUrl, cancelDownload }

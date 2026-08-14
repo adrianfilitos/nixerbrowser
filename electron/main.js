@@ -1,10 +1,10 @@
-const { app, BrowserWindow, ipcMain, session, shell, dialog, webContents, screen, net } = require('electron')
+const { app, BrowserWindow, ipcMain, session, shell, dialog, webContents, screen, net, Menu, nativeTheme, clipboard } = require('electron')
 const { spawn } = require('child_process')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const crypto = require('crypto')
-const { DEV_SERVER_URL, PRIVATE_PARTITION, PROFILE } = require('./constants')
+const { DEV_SERVER_URL, PRIVATE_PARTITION, PROFILE, CHROME_HEIGHT } = require('./constants')
 
 const CHROME_MAJOR = String(process.versions.chrome).split('.')[0]
 
@@ -23,6 +23,8 @@ const store = require('./store')
 const adblock = require('./adblock')
 const ai = require('./ai')
 const nixer = require('./nixer')
+const tabGuards = require('./tab-guards')
+const popups = require('./popups')
 const ctx = require('./ctx')
 const util = require('./util')
 const defaultBrowser = require('./default-browser')
@@ -37,9 +39,30 @@ const pageStyle = require('./page-style')
 const sqlite = require('./sqlite')
 const translate = require('./translate')
 const overlayMod = require('./overlay')
+const profiles = require('./profiles')
+const cursor = require('./cursor')
+const tabs = require('./tabs')
 
 let dragState = null
 let dragTarget = null // { wc, winCtx, attached, entered }
+
+// ---- Detección de cierre anómalo (crash recovery) ---------------------------
+// Si la app no se cierra de forma limpia, el marcador 'clean-exit' no existe:
+// en el siguiente arranque se ofrece "¿Restaurar páginas?".
+function cleanExitMarker() {
+  return path.join(app.getPath('userData'), 'clean-exit')
+}
+
+function markCleanExit() {
+  try { fs.writeFileSync(cleanExitMarker(), String(Date.now())) } catch {}
+}
+
+let abnormalClose = false
+
+function detectAbnormalClose() {
+  abnormalClose = !fs.existsSync(cleanExitMarker())
+  try { fs.rmSync(cleanExitMarker(), { force: true }) } catch {}
+}
 
 function dragData() {
   const st = dragState || {}
@@ -55,6 +78,21 @@ function dragData() {
 function windowAtCursor() {
   const p = screen.getCursorScreenPoint()
   return windowAtPoint(p.x, p.y)
+}
+
+// Fuerza el repintado de una vista tras re-parentarla entre ventanas (Windows
+// deja la WebContentsView en blanco/congelada hasta que se tocan los bounds).
+function nudgeView(view, delay) {
+  if (!view) return
+  const run = () => {
+    try {
+      const b = view.getBounds()
+      view.setBounds({ x: b.x, y: b.y, width: b.width + 1, height: b.height })
+      view.setBounds({ x: b.x, y: b.y, width: b.width, height: b.height })
+    } catch {}
+    try { if (view.webContents && !view.webContents.isDestroyed()) view.webContents.focus() } catch {}
+  }
+  setTimeout(run, typeof delay === 'number' ? delay : 80)
 }
 
 function pointInBounds(b, x, y) {
@@ -114,19 +152,60 @@ function closeDragTarget() {
 function dockInto(targetCtx) {
   if (!dragState || !targetCtx) return
   const st = dragState
-  if (st.url) ctx.sendUi(targetCtx, 'open-tab-bg', st.url)
   const srcCtx = st.win ? ctx.windows.get(st.win) : null
-  if (srcCtx && st.tabId) ctx.sendUi(srcCtx, 'close-tab-by-id', st.tabId)
+  if (st.tabId && srcCtx && srcCtx !== targetCtx) {
+    dockTab(srcCtx, targetCtx, st.tabId)
+  } else if (st.url) {
+    ctx.sendUi(targetCtx, 'open-tab-bg', st.url)
+    if (srcCtx && st.tabId) ctx.sendUi(srcCtx, 'close-tab-by-id', st.tabId)
+  }
   dragState = null
+}
+
+// Mueve una pestaña viva a otra ventana re-parentando su WebContentsView (sin recargar).
+function dockTab(srcCtx, targetCtx, tabId) {
+  const tab = tabs.getTab(srcCtx, tabId)
+  if (!tab || tab.wc.isDestroyed() || !targetCtx || !targetCtx.win || targetCtx.win.isDestroyed()) return
+  srcCtx.tabs.delete(tab.id)
+  tab.winCtx = targetCtx
+  targetCtx.tabs.set(tab.id, tab)
+  try { targetCtx.win.contentView.addChildView(tab.view) } catch {}
+  try { tab.view.setVisible(false) } catch {}
+  ctx.sendUi(srcCtx, 'close-tab-by-id', tab.id)
+  const sendAdopt = () => {
+    if (targetCtx.uiReady && !targetCtx.win.isDestroyed()) {
+      ctx.sendUi(targetCtx, 'tab-adopted', { id: tab.id, wcId: tab.wc.id, url: tab.wc.getURL(), title: tab.wc.getTitle() })
+      nudgeView(tab.view)
+      return true
+    }
+    return false
+  }
+  if (sendAdopt()) return
+  let tries = 0
+  const t = setInterval(() => {
+    tries++
+    if (sendAdopt()) clearInterval(t)
+    else if (tries > 100 || targetCtx.win.isDestroyed()) clearInterval(t)
+  }, 50)
 }
 
 function openUrlInWindow(wctx, url) {
   if (!wctx || !url) return
   const wc = ctx.ui(wctx)
   if (!wc || wc.isDestroyed()) return
-  const send = () => { if (!wc.isDestroyed()) ctx.sendUi(wctx, 'open-tab', url) }
-  if (!wc.isLoading()) { send(); return }
-  wc.once('did-finish-load', () => setTimeout(send, 200))
+  const send = () => {
+    if (!wc.isDestroyed()) ctx.sendUi(wctx, 'open-tab', url)
+    if (wctx.win && !wctx.win.isDestroyed()) {
+      try { wctx.win.show(); wctx.win.focus() } catch {}
+    }
+  }
+  if (wctx.uiReady) { send(); return }
+  let tries = 0
+  const t = setInterval(() => {
+    tries++
+    if (wctx.uiReady) { clearInterval(t); send() }
+    else if (tries > 100 || wc.isDestroyed()) clearInterval(t)
+  }, 50)
 }
 
 function moveTabToNewWindow(srcCtx, st, pos) {
@@ -139,7 +218,8 @@ function moveTabToNewWindow(srcCtx, st, pos) {
 
 function detachFromDrag(srcCtx) {
   if (!dragState || !dragState.url) return
-  moveTabToNewWindow(srcCtx, dragState)
+  if (dragState.tabId && srcCtx) tearOffTab(srcCtx, dragState.tabId)
+  else moveTabToNewWindow(srcCtx, dragState)
 }
 
 function tearoffWindowAt(sx, sy) {
@@ -158,9 +238,50 @@ function tearOff(srcCtx, sx, sy) {
   const p = screen.getCursorScreenPoint()
   const cx = typeof sx === 'number' ? sx : p.x
   const cy = typeof sy === 'number' ? sy : p.y
-  const pos = tearoffWindowAt(cx, cy)
-  moveTabToNewWindow(srcCtx, st, pos)
+  if (st.tabId && srcCtx) {
+    tearOffTab(srcCtx, st.tabId, cx, cy)
+  } else {
+    const pos = tearoffWindowAt(cx, cy)
+    moveTabToNewWindow(srcCtx, st, pos)
+  }
   closeDragTarget()
+}
+
+function tearOffTab(wctx, id, x, y) {
+  const tab = tabs.getTab(wctx, id)
+  if (!tab || tab.wc.isDestroyed()) return
+  const p = screen.getCursorScreenPoint()
+  const cx = typeof x === 'number' ? x : p.x
+  const cy = typeof y === 'number' ? y : p.y
+  const pos = tearoffWindowAt(cx, cy)
+  const newWctx = createWindow({ incognito: wctx.incognito, x: pos.x, y: pos.y })
+  newWctx.awaitingTab = true
+  wctx.tabs.delete(tab.id)
+  tab.winCtx = newWctx
+  newWctx.tabs.set(tab.id, tab)
+  try { newWctx.win.contentView.addChildView(tab.view) } catch {}
+  try {
+    const [w, h] = newWctx.win.getContentSize()
+    tab.view.setBounds({ x: 0, y: CHROME_HEIGHT, width: w, height: Math.max(200, h - CHROME_HEIGHT) })
+  } catch {}
+  try { tab.view.setVisible(true) } catch {}
+  ctx.sendUi(wctx, 'close-tab-by-id', tab.id)
+  const trySend = () => {
+    if (newWctx.uiReady && !newWctx.win.isDestroyed()) {
+      ctx.sendUi(newWctx, 'tab-adopted', { id: tab.id, wcId: tab.wc.id, url: tab.wc.getURL(), title: tab.wc.getTitle() })
+      try { newWctx.win.show(); newWctx.win.focus() } catch {}
+      nudgeView(tab.view)
+      return true
+    }
+    return false
+  }
+  if (trySend()) return
+  let tries = 0
+  const t = setInterval(() => {
+    tries++
+    if (trySend()) clearInterval(t)
+    else if (tries > 100 || newWctx.win.isDestroyed()) clearInterval(t)
+  }, 50)
 }
 
 if (store.settings().hardwareAcceleration === false) {
@@ -170,9 +291,17 @@ if (store.settings().gpuRasterization === false) {
   app.commandLine.appendSwitch('disable-gpu-rasterization')
 }
 
+// Fuerza el tema de las páginas: nativeTheme.themeSource hace que Chromium
+// evalúe prefers-color-scheme acorde para TODOS los webContents, en vivo.
+function applyForcedTheme() {
+  const t = store.settings().forcePageTheme
+  try { nativeTheme.themeSource = t === 'dark' ? 'dark' : t === 'light' ? 'light' : 'system' } catch {}
+}
+applyForcedTheme()
+
 nixer.registerScheme()
 
-const gotLock = app.requestSingleInstanceLock()
+const gotLock = app.requestSingleInstanceLock(PROFILE)
 if (!gotLock) {
   app.quit()
 } else {
@@ -190,11 +319,26 @@ if (!gotLock) {
   })
 }
 
+// ---- Seguridad SSL/TLS ----------------------------------------------------
+// Certificados que fallaron validación (emitidos por CA o no): se registran por
+// origen y NUNCA se omiten. El indicador del candado consulta este estado real.
+const insecureOrigins = new Map() // origin -> { code, ts }
+
+app.on('certificate-error', (event, _wc, url, error, _certificate, callback) => {
+  let origin = ''
+  try { origin = new URL(url).origin } catch {}
+  if (origin) insecureOrigins.set(origin, { code: error, ts: Date.now() })
+  // Nunca hacer bypass: se bloquea la navegación y Chromium muestra su página
+  // de error de conexión.
+  callback(false)
+})
+
 function guardState(origin) {
   const s = store.settings()
   const shields = (s.siteShields && s.siteShields[origin]) || {}
   return {
     blockAds: shields.blockAds !== undefined ? shields.blockAds : s.blockAds,
+    blockTrackers: shields.blockTrackers !== undefined ? shields.blockTrackers : s.blockTrackers,
     blockScripts: shields.blockScripts !== undefined ? shields.blockScripts : s.blockScripts,
     blockThirdPartyCookies: shields.blockCookies !== undefined ? shields.blockCookies : s.blockThirdPartyCookies,
     blockImages: s.showImages === false,
@@ -203,7 +347,99 @@ function guardState(origin) {
   }
 }
 
-function createWindow({ incognito = false, x, y } = {}) {
+// ---- IA: aumento de contexto (grounding + @pestañas + página actual) ------
+async function pageTextOf(wc) {
+  if (!wc || wc.isDestroyed()) return ''
+  try {
+    const id = await reader.extractReader(wc)
+    const content = id ? reader.getReader(id) : null
+    return (content && content.text) || ''
+  } catch {
+    return ''
+  }
+}
+
+async function augmentAiMessages(messages, wctx) {
+  const list = Array.isArray(messages) ? messages.slice() : []
+  const last = [...list].reverse().find((m) => m && m.role === 'user')
+  const q = String(last && last.content || '').trim()
+  if (!q) return list
+
+  const tabsArr = wctx ? Array.from(wctx.tabs.values()) : []
+  const context = []
+  const used = new Set()
+
+  // @pestañas: completar por título/URL; @current / "esta página" usa la activa.
+  const ats = String(q).match(/@([\wáéíóúñÁÉÍÓÚÑ][\wáéíóúñÁÉÍÓÚÑ.\-]{0,40})/g) || []
+  for (const at of ats) {
+    const token = at.slice(1).trim().toLowerCase()
+    if (!token) continue
+    if (['current', 'actual', 'esta', 'pagina', 'página', 'this', 'page'].includes(token)) {
+      const awc = wctx && ctx.activeWc ? ctx.activeWc(wctx) : null
+      if (awc && !awc.isDestroyed() && /^https?:/.test(awc.getURL() || '')) {
+        let title = ''
+        try { title = awc.getTitle() || '' } catch {}
+        const text = (await pageTextOf(awc)).slice(0, 6000)
+        context.push('Página actual:\nTítulo: ' + title + '\nURL: ' + (awc.getURL() || '') + '\n\n' + text)
+      }
+      continue
+    }
+    const match = tabsArr.find((t) => {
+      let title = ''
+      let url = ''
+      try { title = (t.wc.getTitle() || '').toLowerCase() } catch {}
+      try { url = (t.wc.getURL() || '').toLowerCase() } catch {}
+      return title.includes(token) || url.includes(token)
+    })
+    if (match && !used.has(match.id)) {
+      used.add(match.id)
+      let title = ''
+      let url = ''
+      try { title = match.wc.getTitle() || '' } catch {}
+      try { url = match.wc.getURL() || '' } catch {}
+      const text = (await pageTextOf(match.wc)).slice(0, 6000)
+      context.push('Pestaña @"' + token + '":\nTítulo: ' + title + '\nURL: ' + url + '\n\n' + text)
+    }
+  }
+  // Nombres de pestaña con espacios insertados por @completion: coincidencia por
+  // título completo tras un '@'.
+  if (!used.size || true) {
+    const ql = String(q).toLowerCase()
+    for (const t of tabsArr) {
+      if (used.has(t.id)) continue
+      let title = ''
+      try { title = (t.wc.getTitle() || '').toLowerCase() } catch {}
+      if (title && ql.includes('@' + title)) {
+        used.add(t.id)
+        let url = ''
+        try { url = t.wc.getURL() || '' } catch {}
+        const text = (await pageTextOf(t.wc)).slice(0, 6000)
+        context.push('Pestaña: ' + title + '\nURL: ' + url + '\n\n' + text)
+      }
+    }
+  }
+
+  let system = 'Eres el asistente de Nixer Browser. Responde en español, de forma concisa y útil, con datos actuales.\n' +
+    'Reglas: si mencionas una URL usa el formato [texto](url). No digas que no puedes navegar ni abrir páginas: tienes acceso a resultados de búsqueda y al contexto de las pestañas y de la página actual.\n'
+
+  const alreadyHasSearch = /resultados de búsqueda/i.test(String(last.content || ''))
+  if (!alreadyHasSearch) {
+    const results = await ai.searchWeb(q.slice(0, 300)).catch(() => [])
+    if (results && results.length) {
+      system += '\nResultados de búsqueda para "' + q + '":\n' +
+        results.map((r, i) => (i + 1) + '. ' + (r.title || '') + ' — ' + (r.url || '') + '\n' + (r.snippet || '')).join('\n\n')
+    } else {
+      system += '\n(No se obtuvieron resultados de búsqueda web para esta consulta.)\n'
+    }
+  }
+  if (context.length) {
+    system += '\n\nContexto de las pestañas:\n' + context.join('\n\n---\n\n')
+  }
+
+  return [{ role: 'system', content: system }, ...list]
+}
+
+function createWindow({ incognito = false, x, y, initial = false } = {}) {
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -223,7 +459,7 @@ function createWindow({ incognito = false, x, y } = {}) {
       backgroundColor: '#141414',
     },
   })
-  const wctx = { id: ctx.nextWindow(), win, incognito, activeWcId: null }
+  const wctx = { id: ctx.nextWindow(), win, incognito, activeWcId: null, uiReady: false, initial: !!initial, awaitingTab: false, tabs: new Map(), lastLayout: [] }
   ctx.registerWindow(win, wctx)
 
   if (app.isPackaged) win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
@@ -233,6 +469,13 @@ function createWindow({ incognito = false, x, y } = {}) {
       win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
     }
   })
+  try {
+    win.webContents.on('before-input-event', (_e, input) => {
+      if (input.type === 'mouseDown') {
+        try { popups.hideAllForWindow(wctx) } catch {}
+      }
+    })
+  } catch {}
   win.webContents.on('did-finish-load', () => {
     if (!win.isDestroyed() && process.env.SMOKE !== '1') {
       win.show()
@@ -242,6 +485,12 @@ function createWindow({ incognito = false, x, y } = {}) {
 
   win.on('maximize', () => { const t = ctx.ui(wctx); if (t && !t.isDestroyed()) t.send('win-maximized', true) })
   win.on('unmaximize', () => { const t = ctx.ui(wctx); if (t && !t.isDestroyed()) t.send('win-maximized', false) })
+  win.on('resize', () => {
+    // Al redimensionar la ventana se recalculan los bounds de las pestañas
+    // respetando la franja superior reservada (CHROME_HEIGHT): la página nunca
+    // se superpone a la barra de herramientas ni se sale por la parte inferior.
+    try { tabs.reapplyLayout(wctx) } catch {}
+  })
   win.on('close', (e) => {
     if (!incognito && store.settings().minimizeToTray && !system.isQuitting()) {
       e.preventDefault()
@@ -251,6 +500,9 @@ function createWindow({ incognito = false, x, y } = {}) {
   })
   win.on('closed', () => {
     ctx.unregisterWindow(win)
+    popups.hideAllForWindow(wctx)
+    cursor.hideAll(wctx)
+    if (wctx.tabs) tabs.closeAll(wctx)
     if (incognito) {
       const ses = session.fromPartition(PRIVATE_PARTITION)
       try { ses.clearStorageData() } catch {}
@@ -266,7 +518,91 @@ function broadcastToast(text, kind) {
   }
 }
 
+// Ventana de entrada (onboarding): standalone, sin el navegador.
+let onboardingWin = null
+
+function openOnboarding() {
+  if (onboardingWin && !onboardingWin.isDestroyed()) {
+    onboardingWin.show()
+    onboardingWin.focus()
+    return onboardingWin
+  }
+  onboardingWin = new BrowserWindow({
+    width: 500,
+    height: 660,
+    frame: false,
+    resizable: false,
+    show: false,
+    backgroundColor: '#101014',
+    webPreferences: {
+      preload: path.join(__dirname, 'view-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  onboardingWin.loadFile(path.join(__dirname, '..', 'pages', 'onboarding.html'))
+  onboardingWin.once('ready-to-show', () => { if (onboardingWin && !onboardingWin.isDestroyed()) onboardingWin.show() })
+  onboardingWin.on('closed', () => { onboardingWin = null })
+  return onboardingWin
+}
+
 function registerIpc() {
+  // ---- Perfiles / cuentas ---------------------------------------------------
+  function notifyProfilesChanged() {
+    util.broadcastSettings()
+    for (const c of ctx.windows.values()) {
+      const ui = ctx.ui(c)
+      if (ui && !ui.isDestroyed()) ui.send('ui-action', 'profiles-changed')
+    }
+    // Si la puerta de entrada sigue abierta, cerrarla y abrir el navegador.
+    if (onboardingWin && !onboardingWin.isDestroyed() && profiles.hasActive()) {
+      onboardingWin.destroy()
+      onboardingWin = null
+      try {
+        if (BrowserWindow.getAllWindows().length === 0) createWindow({ initial: true })
+      } catch (e) {
+        console.log('PROFILE_WIN_ERR', e && e.message)
+      }
+    }
+  }
+
+  ipcMain.handle('profiles:status', () => profiles.status())
+  ipcMain.handle('profiles:list', () => profiles.list())
+  ipcMain.handle('profiles:create-local', (_e, name, color) => {
+    const r = profiles.createLocal(name, color)
+    notifyProfilesChanged()
+    return r
+  })
+  ipcMain.handle('profiles:switch', (_e, id) => {
+    const r = profiles.switchTo(id)
+    notifyProfilesChanged()
+    return r
+  })
+  ipcMain.handle('profiles:update', (_e, id, patch) => profiles.updateProfile(id, patch))
+  ipcMain.handle('profiles:remove', (_e, id) => {
+    const r = profiles.removeProfile(id)
+    notifyProfilesChanged()
+    return r
+  })
+  ipcMain.handle('profiles:signup-cloud', async (_e, email, password, adopt) => {
+    const r = await profiles.signupCloud(email, password, !!adopt)
+    notifyProfilesChanged()
+    return r
+  })
+  ipcMain.handle('profiles:signin-cloud', async (_e, email, password, adopt) => {
+    const r = await profiles.signinCloud(email, password, !!adopt)
+    notifyProfilesChanged()
+    return r
+  })
+  ipcMain.handle('profiles:signin-provider', async (_e, provider, adopt) => {
+    const r = await profiles.loginWithProvider(provider, !!adopt)
+    notifyProfilesChanged()
+    return r
+  })
+  ipcMain.handle('profiles:signout', () => profiles.signoutCloud())
+  ipcMain.handle('profiles:sync-now', async () => profiles.syncNow())
+
   ipcMain.on('win-minimize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.minimize() })
   ipcMain.on('win-toggle-maximize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) { if (w.isMaximized()) w.unmaximize(); else w.maximize() } })
   ipcMain.on('win-close', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close() })
@@ -288,7 +624,7 @@ function registerIpc() {
   })
   ipcMain.handle('window-info', (e) => {
     const c = ctx.ctxFor(e)
-    return c ? { incognito: c.incognito, id: c.id } : { incognito: false, id: 0 }
+    return c ? { incognito: c.incognito, id: c.id, initial: !!c.initial, awaitingTab: !!c.awaitingTab, crash: abnormalClose } : { incognito: false, id: 0, initial: false, awaitingTab: false, crash: abnormalClose }
   })
   ipcMain.on('drag-start', (e, info) => {
     const c = ctx.ctxFor(e)
@@ -353,6 +689,60 @@ function registerIpc() {
       const w = webContents.fromId(Number(wcId))
       if (w && w.session === session.defaultSession) eng.selectTab(w)
     }
+  })
+  ipcMain.on('cursor:move', (e, x, y, visible) => {
+    const c = ctx.ctxFor(e)
+    if (c) cursor.update(c, x, y, visible)
+  })
+  ipcMain.on('ui-ready', (e) => {
+    const c = ctx.ctxFor(e)
+    if (c) c.uiReady = true
+  })
+  ipcMain.handle('tabs:create', (e, payload) => {
+    const c = ctx.ctxFor(e)
+    if (!c) return { wcId: 0 }
+    return tabs.createTab(c, { id: payload && payload.id, src: payload && payload.src, partition: c.incognito ? PRIVATE_PARTITION : undefined, preload: path.join(__dirname, 'view-preload.js') })
+  })
+  ipcMain.on('tabs:close', (e, id) => { const c = ctx.ctxFor(e); if (c) tabs.closeTab(c, id) })
+  ipcMain.on('tabs:close-force', (e, id) => { const c = ctx.ctxFor(e); if (c) tabs.forceCloseTab(c, id) })
+  ipcMain.on('tabs:load', (e, id, url) => { const c = ctx.ctxFor(e); if (c) tabs.loadTab(c, id, url) })
+  ipcMain.on('tabs:reload', (e, id, noCache) => { const c = ctx.ctxFor(e); if (c) tabs.reloadTab(c, id, noCache) })
+  ipcMain.on('tabs:stop', (e, id) => { const c = ctx.ctxFor(e); if (c) tabs.stopTab(c, id) })
+  ipcMain.on('tabs:back', (e, id) => { const c = ctx.ctxFor(e); if (c) tabs.backTab(c, id) })
+  ipcMain.on('tabs:forward', (e, id) => { const c = ctx.ctxFor(e); if (c) tabs.forwardTab(c, id) })
+  ipcMain.handle('tabs:nav-state', (e, id) => { const c = ctx.ctxFor(e); return c ? tabs.navState(c, id) : { canGoBack: false, canGoForward: false, isLoading: false } })
+  ipcMain.handle('tabs:zoom-get', (e, id) => { const c = ctx.ctxFor(e); return c ? tabs.zoomGet(c, id) : 1 })
+  ipcMain.on('tabs:zoom-set', (e, id, factor) => { const c = ctx.ctxFor(e); if (c) tabs.zoomSet(c, id, factor) })
+  ipcMain.on('tabs:mute', (e, id, muted) => { const c = ctx.ctxFor(e); if (c) tabs.muteTab(c, id, muted) })
+  ipcMain.on('tabs:find', (e, id, text, findNext) => { const c = ctx.ctxFor(e); if (c) tabs.findTab(c, id, text, { findNext: !!findNext }) })
+  ipcMain.on('tabs:stop-find', (e, id, action) => { const c = ctx.ctxFor(e); if (c) tabs.stopFindTab(c, id, action) })
+  ipcMain.on('tabs:input', (e, id, ev) => { const c = ctx.ctxFor(e); if (c) tabs.inputTab(c, id, ev) })
+  ipcMain.handle('tabs:execute', (e, id, code) => { const c = ctx.ctxFor(e); return c ? tabs.executeTab(c, id, code) : null })
+  ipcMain.handle('tabs:get-url', (e, id) => { const c = ctx.ctxFor(e); return c ? tabs.getUrl(c, id) : '' })
+  ipcMain.handle('tabs:get-title', (e, id) => { const c = ctx.ctxFor(e); return c ? tabs.getTitle(c, id) : '' })
+  ipcMain.handle('tabs:get-wc', (e, id) => { const c = ctx.ctxFor(e); return c ? tabs.getWcId(c, id) : 0 })
+  ipcMain.on('tabs:layout', (e, visible) => { const c = ctx.ctxFor(e); if (c) tabs.setLayout(c, visible && visible.visible) })
+  ipcMain.on('tabs:tearoff', (e, id, x, y) => { const c = ctx.ctxFor(e); if (c) tearOffTab(c, id, x, y) })
+  ipcMain.on('popup:show', (e, opts) => { const c = ctx.ctxFor(e); if (c) popups.showPopup(c, opts) })
+  ipcMain.on('popup:hide', (e, key) => { const c = ctx.ctxFor(e); if (c) popups.hidePopup(c, key) })
+  ipcMain.on('popup:update', (e, key, payload) => { const c = ctx.ctxFor(e); if (c) popups.updateContent(c, key, payload) })
+  ipcMain.on('popup-action', (e, key, data) => {
+    const c = popups.wctxForWc(e.sender)
+    if (c) {
+      const ui = ctx.ui(c)
+      if (ui && !ui.isDestroyed()) ui.send('popup-action', { key, data })
+      // Los popups interactivos (paleta, buscar, escudos, IA, tareas…) se
+      // mantienen abiertos tras una acción; solo se cierran explícitamente.
+      if (!popups.isKeepOpen(key)) popups.hidePopup(c, key)
+    }
+  })
+  ipcMain.on('popup-close', (e, key) => {
+    const c = popups.wctxForWc(e.sender)
+    if (c) popups.hidePopup(c, key)
+  })
+  ipcMain.on('popup:close-all', (e) => {
+    const c = ctx.ctxFor(e)
+    if (c) popups.hideAllForWindow(c)
   })
   ipcMain.on('add-history', (e, entry) => {
     const c = ctx.ctxFor(e)
@@ -570,7 +960,7 @@ function registerIpc() {
   ipcMain.handle('get-url-overrides', () => (extensions.getEngine() && extensions.getEngine().getURLOverrides()) || {})
 
   ipcMain.on('permission-response', (e, payload) => {
-    system.respondPermission(payload && payload.id, payload && payload.allow, payload && payload.remember)
+    system.respondPermission(payload && payload.id, payload || {})
   })
 
   ipcMain.handle('save-page', (e) => { const c = ctx.ctxFor(e); if (c) downloads.savePageOf(ctx.activeWc(c)) })
@@ -582,18 +972,34 @@ function registerIpc() {
   ipcMain.handle('taskmanager:list', async () => {
     const rows = []
     let total = 0
-    for (const wc of webContents.getAllWebContents()) {
-      if (wc.getType() !== 'webview') continue
-      let mem = 0
-      try {
-        const pid = wc.getOSProcessId()
+    let metrics = []
+    try { metrics = app.getAppMetrics() || [] } catch {}
+    const memByPid = new Map()
+    for (const m of metrics) {
+      if (m && m.pid && m.memory && typeof m.memory.workingSetSize === 'number') {
+        memByPid.set(m.pid, m.memory.workingSetSize * 1024)
+      }
+    }
+    const countedPids = new Set()
+    // Las pestañas son WebContentsView (tipo 'window'): se recorren las vistas
+    // registradas por ventana en lugar de filtrar por getType().
+    for (const wctx of ctx.windows.values()) {
+      if (!wctx || !wctx.tabs) continue
+      for (const tab of wctx.tabs.values()) {
+        const wc = tab && tab.wc
+        if (!wc || wc.isDestroyed()) continue
+        let mem = 0
+        let pid = 0
+        try { pid = wc.getOSProcessId() } catch {}
         if (pid) {
-          const info = await process.getProcessMemoryInfo(pid)
-          mem = info.workingSetSize
+          mem = memByPid.get(pid) || 0
+          if (mem && !countedPids.has(pid)) {
+            countedPids.add(pid)
+            total += mem
+          }
         }
-      } catch {}
-      rows.push({ id: wc.id, title: wc.getTitle() || 'Página', url: wc.getURL(), mem })
-      total += mem
+        rows.push({ id: wc.id, title: wc.getTitle() || 'Página', url: wc.getURL(), mem })
+      }
     }
     return { rows, total }
   })
@@ -604,26 +1010,6 @@ function registerIpc() {
   ipcMain.handle('bookmarks:remove', (_e, id) => store.removeBookmark(id))
   ipcMain.handle('bookmarks:update', (_e, id, patch) => store.updateBookmark(id, patch))
   ipcMain.handle('bookmarks:reorder', (_e, ids) => store.reorderBookmarks(ids))
-  ipcMain.handle('profiles:list', () => {
-    const base = path.join(app.getPath('appData'), 'navegador-profiles')
-    const names = []
-    try { names.push(...fs.readdirSync(base).filter((n) => fs.statSync(path.join(base, n)).isDirectory())) } catch {}
-    return { current: PROFILE, profiles: ['default', ...names.sort()] }
-  })
-  ipcMain.handle('profiles:switch', (_e, name) => {
-    const n = String(name || '').replace(/[^a-zA-Z0-9-_]/g, '').slice(0, 40) || 'default'
-    const args = process.argv.filter((a) => !a.startsWith('--profile=')).concat(['--profile=' + n])
-    app.relaunch({ args })
-    app.exit(0)
-    return true
-  })
-  ipcMain.handle('profiles:delete', (_e, name) => {
-    const n = String(name || '').replace(/[^a-zA-Z0-9-_]/g, '')
-    if (!n || n === 'default') return false
-    const dir = path.join(app.getPath('appData'), 'navegador-profiles', n)
-    try { fs.rmSync(dir, { recursive: true, force: true }) } catch {}
-    return true
-  })
   ipcMain.handle('readinglist:list', () => store.listReadingList())
   ipcMain.handle('readinglist:add', (_e, item) => store.addReadingItem(item))
   ipcMain.handle('readinglist:remove', (_e, id) => store.removeReadingItem(id))
@@ -751,17 +1137,47 @@ function registerIpc() {
   ipcMain.handle('history:remove', (_e, url) => store.removeHistory(url))
   ipcMain.handle('downloads:list', () => store.downloads())
   ipcMain.handle('downloads:clear', () => { store.clearDownloads(); util.broadcastDownloads() })
+  ipcMain.handle('downloads:remove', (_e, id) => { store.removeDownload(id); util.broadcastDownloads(); return true })
   ipcMain.handle('downloads:open', (_e, p) => { if (p) { try { shell.openPath(p) } catch {} } return true })
   ipcMain.handle('downloads:show', (_e, p) => { if (p) { try { shell.showItemInFolder(p) } catch {} } return true })
   ipcMain.handle('downloads:folder', (_e, p) => { if (p) { try { shell.openPath(path.dirname(p)) } catch {} } return true })
   ipcMain.handle('downloads:cancel', (_e, id) => downloads.cancelDownload(id))
+  ipcMain.handle('downloads:preview', (_e, p) => {
+    if (!p || typeof p !== 'string') return null
+    const mime = (ext) => ({ jpg: 'jpeg', jpeg: 'jpeg', png: 'png', gif: 'gif', webp: 'webp', bmp: 'bmp', ico: 'x-icon', svg: 'svg+xml' }[ext] || null)
+    try {
+      const ext = path.extname(p).slice(1).toLowerCase()
+      const t = mime(ext)
+      if (!t) return null
+      const size = fs.statSync(p).size
+      if (size > 3 * 1024 * 1024) return null
+      const buf = fs.readFileSync(p)
+      return 'data:image/' + t + ';base64,' + buf.toString('base64')
+    } catch {
+      return null
+    }
+  })
   ipcMain.handle('settings:get', () => util.settingsForUi())
   ipcMain.handle('settings:defaults', () => store.settingsDefaults())
+  ipcMain.handle('permissions:list', () => system.listSitePermissions())
+  ipcMain.handle('permissions:set', (e, origin, permission, state) => {
+    if (state === 'once') {
+      const c = ctx.ctxFor(e)
+      const wc = c && c.activeWcId ? webContents.fromId(c.activeWcId) : null
+      if (wc) system.grantOnce(wc.id, origin, permission)
+      return true
+    }
+    system.setSitePermission(origin, permission, state)
+    return true
+  })
+  ipcMain.handle('permissions:clear', (_e, origin) => { system.clearSitePermissions(origin); return true })
+  ipcMain.handle('permissions:clear-all', () => { system.clearAllSitePermissions(); return true })
   ipcMain.handle('settings:set', (_e, patch) => {
     if (patch && typeof patch.aiApiKey === 'string' && patch.aiApiKey) {
       patch = { ...patch, aiApiKey: store.encryptSecret(patch.aiApiKey) }
     }
     store.setSettings(patch)
+    if (patch.forcePageTheme !== undefined) applyForcedTheme()
     if (patch.downloadPath !== undefined) {
       try { session.defaultSession.setDownloadPath(patch.downloadPath || app.getPath('downloads')) } catch {}
     }
@@ -779,7 +1195,29 @@ function registerIpc() {
     return store.recentSearches().filter((s) => !term || s.toLowerCase().indexOf(term) !== -1)
   })
   ipcMain.on('search:record', (_e, q) => store.addSearch(q))
-  ipcMain.handle('ai:chat', (_e, messages) => ai.chat(messages || []))
+  ipcMain.handle('ai:chat', async (e, messages) => {
+    const c = ctx.ctxFor(e)
+    const augmented = await augmentAiMessages(messages, c)
+    return ai.chat(augmented)
+  })
+  ipcMain.handle('ai:search', (_e, query) => ai.searchWeb(String(query || '').slice(0, 300)))
+  ipcMain.handle('ai:page-context', async (e) => {
+    const c = ctx.ctxFor(e)
+    const w = c && ctx.activeWc(c)
+    if (!w || w.isDestroyed()) return { title: '', url: '', text: '' }
+    let url = ''
+    try { url = w.getURL() } catch {}
+    if (!url || !/^https?:/.test(url)) return { title: '', url: '', text: '' }
+    let title = ''
+    try { title = w.getTitle() || '' } catch {}
+    let text = ''
+    try {
+      const id = await reader.extractReader(w)
+      const content = id ? reader.getReader(id) : null
+      text = (content && content.text) || ''
+    } catch {}
+    return { title, url, text }
+  })
   ipcMain.handle('translate:text', (_e, text, tl) => translate.translateText(String(text || ''), tl))
   ipcMain.handle('adblock:stats', () => adblock.stats())
   ipcMain.handle('adblock:refresh', () => { adblock.refresh(); return true })
@@ -794,6 +1232,7 @@ function registerIpc() {
     return {
       origin: o,
       blockAds: g.blockAds,
+      blockTrackers: g.blockTrackers,
       blockScripts: g.blockScripts,
       blockCookies: g.blockThirdPartyCookies,
       ads: blocked.ads || 0,
@@ -807,6 +1246,17 @@ function registerIpc() {
     s.siteShields[payload.origin] = Object.assign({}, s.siteShields[payload.origin], payload.patch)
     store.setSettings({ siteShields: s.siteShields })
     return true
+  })
+  ipcMain.on('clipboard:write', (_e, text) => {
+    if (typeof text === 'string' && text) {
+      try { clipboard.writeText(text) } catch {}
+    }
+  })
+  ipcMain.handle('cert:status', (_e, origin) => {
+    let o = ''
+    try { o = new URL(origin).origin } catch { o = origin }
+    const bad = insecureOrigins.get(o)
+    return { secure: !!o && o.startsWith('https://') && !bad, error: bad ? bad.code : null }
   })
   ipcMain.handle('site:cookies', async (_e, origin) => {
     try {
@@ -1052,9 +1502,11 @@ const { buildMenu, showContentMenu } = menus.createMenus({
   translatePage: translate.translatePage,
   translateText: translate.translateText,
 })
+tabGuards.setShowContentMenu(showContentMenu)
 
 app.on('web-contents-created', (_e, wc) => {
-  if (wc.getType() === 'window') {
+  const type = wc.getType()
+  if (type === 'window') {
     wc.on('will-attach-webview', (event, webPreferences) => {
       webPreferences.sandbox = true
       webPreferences.contextIsolation = true
@@ -1066,28 +1518,9 @@ app.on('web-contents-created', (_e, wc) => {
     })
     return
   }
-  if (wc.getType() !== 'webview') return
-  extensions.registerTab(wc)
-  wc.on('context-menu', (_ev, params) => {
-    const c = ctx.ctxForWc(wc)
-    if (c) showContentMenu(c, wc, params)
-  })
-  safeBrowsing.attachWebviewGuards(wc)
-  pageStyle.attach(wc)
-  wc.on('update-target-url', (_e, url) => {
-    const c = ctx.ctxForWc(wc)
-    if (c) ctx.sendUi(c, 'status-url', url || '')
-  })
-  wc.setWindowOpenHandler(({ url }) => {
-    if (store.settings().blockPopups) {
-      let host = ''
-      try { host = new URL(url).hostname } catch {}
-      if (host !== 'google.com' && !host.endsWith('.google.com')) return { action: 'deny' }
-    }
-    const c = ctx.ctxForWc(wc)
-    if (c && url) ctx.sendUi(c, 'open-tab', url)
-    return { action: 'deny' }
-  })
+  if (type !== 'webview' && type !== 'browserView') return
+  if (type === 'webview') extensions.registerTab(wc)
+  tabGuards.attachTabGuards(wc)
   wc.on('dom-ready', () => {
     let host = ''
     try { host = new URL(wc.getURL()).hostname } catch {}
@@ -1116,6 +1549,7 @@ app.on('web-contents-created', (_e, wc) => {
 })
 
 app.whenReady().then(() => {
+  detectAbnormalClose()
   const ap = store.settings().autoplayPolicy
   try { session.defaultSession.setAutoplayPolicy(ap) } catch {}
   try { session.fromPartition(PRIVATE_PARTITION).setAutoplayPolicy(ap) } catch {}
@@ -1154,7 +1588,20 @@ app.whenReady().then(() => {
   extensions.setupExtensions(createWindow)
   nixer.install([session.defaultSession, session.fromPartition(PRIVATE_PARTITION)])
   extensions.rehydrateExtensions()
-  createWindow()
+  profiles.init()
+  // Puerta de entrada: sin perfil activo se abre la ventana de bienvenida/registro
+  // (standalone); tras crearla/iniciar sesión se abre el navegador.
+  // En entornos de test/CI se auto-crea un perfil por defecto para no bloquear.
+  if (profiles.hasActive()) {
+    createWindow({ initial: true })
+  } else if (process.env.SMOKE === '1' || (process.env.NIXER_USER_DATA && process.env.NIXER_SKIP_AUTOCREATE !== '1')) {
+    profiles.ensureDefault()
+    createWindow({ initial: true })
+  } else if (process.env.SMOKE !== '1') {
+    openOnboarding()
+  } else {
+    createWindow({ initial: true })
+  }
   overlayMod.init({ onToast: broadcastToast, getSettings: () => store.settings() })
   overlayMod.applySettings()
   if (process.env.SMOKE === '1') runSmoke()
@@ -1179,9 +1626,9 @@ async function runSmoke() {
     const uiWc = wctx.win.webContents
     await new Promise((r) => setTimeout(r, 3000))
 
-    results.webviews = await uiWc.executeJavaScript(`(async () => {
+    results.tabs = await uiWc.executeJavaScript(`(async () => {
       for (let i = 0; i < 60; i++) {
-        const n = document.querySelectorAll('webview').length
+        const n = document.querySelectorAll('.tab').length
         if (n > 0) return n
         await new Promise((r) => setTimeout(r, 500))
       }
@@ -1218,50 +1665,46 @@ async function runSmoke() {
         document.querySelector('.menu-btn').click()
         await new Promise((r) => setTimeout(r, 400))
         const dd = !!document.querySelector('.dropdown')
-        const webviewStillVisible = !!document.querySelector('webview.active')
-        return { dropdown: dd, webviewStillVisible }
+        const tabsStill = document.querySelectorAll('.tab').length > 0
+        return { dropdown: dd, tabsStill }
       })()
     `)
+    results.menu.popup = popups.debugBounds().length > 0
+    results.menu.dropdown = results.menu.dropdown || results.menu.popup
 
     await uiWc.executeJavaScript(`(async () => { document.querySelector('.menu-btn').click(); await new Promise((r) => setTimeout(r, 400)); return true })()`)
 
-    await uiWc.executeJavaScript(`
+    results.navOk = await uiWc.executeJavaScript(`
       (async () => {
-        const wv = document.querySelector('webview.active')
-        if (!wv) return 'NO_WEBVIEW'
-        wv.loadURL('http://127.0.0.1:${port}/')
+        const active = document.querySelector('.tab.active')
+        if (!active) return 'NO_TAB'
+        const id = active.dataset.id
+        window.api.tabLoad(id, 'http://127.0.0.1:${port}/')
         await new Promise((r) => setTimeout(r, 3500))
-        return true
+        return id
       })()
     `)
     const blocked = errors.filter((e) => e.url.includes('doubleclick.net') && String(e.error).toUpperCase().includes('BLOCKED_BY_CLIENT'))
     results.adblock = blocked.length > 0
-    results.doubleclickErrors = errors.filter((e) => e.url.includes('doubleclick.net')).map((e) => e.error)
     results.anyAdErrors = errors.map((e) => e.error)
-    results.webviewAfterNav = await uiWc.executeJavaScript(`document.querySelector('webview.active') ? 'YES' : 'NO'`)
-    results.pageUrl = await uiWc.executeJavaScript(`(() => { const wv = document.querySelector('webview.active'); return wv ? wv.getURL() : '' })()`)
-    results.webviewRect = await uiWc.executeJavaScript(`(() => { const wv = document.querySelector('webview.active'); if (!wv) return null; const r = wv.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) } })()`)
-    results.preloadOk = await uiWc.executeJavaScript(`
-      (async () => {
-        const wv = document.querySelector('webview.active')
-        try { return await wv.executeJavaScript('typeof window.browserAPI') } catch (e) { return 'ERR:' + e.message }
-      })()
-    `)
+    results.pageUrl = results.navOk && results.navOk !== 'NO_TAB' ? await uiWc.executeJavaScript(`window.api.tabGetUrl('${results.navOk}')`) : ''
+    results.execOk = results.navOk && results.navOk !== 'NO_TAB' ? await uiWc.executeJavaScript(`window.api.tabExecute('${results.navOk}', 'document.title')`) : null
     server.close()
   } catch (e) {
     results.error = String(e)
   }
   console.log('SMOKE_RESULT:', JSON.stringify(results))
-  const ok = results.webviews > 0
+  const ok = results.tabs > 0
     && results.autocomplete && results.autocomplete.dropdown
-    && results.menu && results.menu.dropdown && results.menu.webviewStillVisible
+    && results.menu && results.menu.dropdown && results.menu.tabsStill
     && results.adblock === true
-    && results.webviewAfterNav === 'YES'
+    && results.pageUrl && String(results.pageUrl).startsWith('http://127.0.0.1')
   app.exit(ok ? 0 : 1)
 }
 
 app.on('before-quit', () => {
   global.__nixerQuitting = true
+  markCleanExit()
 })
 
 app.on('will-quit', () => {

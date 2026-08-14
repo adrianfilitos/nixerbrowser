@@ -20,18 +20,23 @@ app.whenReady().then(async () => {
   await delay(1200)
 
   const count0 = await ui.executeJavaScript(`document.querySelectorAll('.tab').length`)
-  const rects = await ui.executeJavaScript(`Array.from(document.querySelectorAll('.tab')).slice(0,2).map(t => { const r = t.getBoundingClientRect(); return { x: Math.round(r.x + r.width/2), y: Math.round(r.y + r.height/2) } })`)
-  // simular arrastre de tab0 sobre tab1: no debe mover la ventana ni crear pestañas
-  const from = rects[0]
-  const to = rects[1]
   const pos0 = win.getPosition()
-  ui.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 })
-  for (let i = 1; i <= 25; i++) {
-    ui.sendInputEvent({ type: 'mouseMove', x: Math.round(from.x + (to.x - from.x) * (i / 25)), y: from.y, button: 'left', buttons: 1, movementX: 2, movementY: 0 })
-    await delay(20)
-  }
-  await delay(300)
-  ui.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
+  const rects = await ui.executeJavaScript(`Array.from(document.querySelectorAll('.tab')).slice(0,2).map(t => { const r = t.getBoundingClientRect(); return { x: Math.round(r.x + r.width/2), y: Math.round(r.y + r.height/2), left: r.left, width: r.width } })`)
+  const to = rects[1]
+  const dropX = Math.round(to.left + to.width * 0.75)
+  const dropY = to.y
+
+  // drag nativo HTML5: reorder dentro de la ventana. No debe mover la ventana ni crear pestañas.
+  await ui.executeJavaScript(`(() => {
+    const tabs = Array.from(document.querySelectorAll('.tab'))
+    const list = document.querySelector('.tab-list')
+    const dt = new DataTransfer()
+    tabs[0].dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }))
+    list.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, clientX: ${dropX}, clientY: ${dropY}, dataTransfer: dt }))
+    list.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, clientX: ${dropX}, clientY: ${dropY}, dataTransfer: dt }))
+    tabs[0].dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, clientX: ${dropX}, clientY: ${dropY}, dataTransfer: dt }))
+    return true
+  })()`)
   await delay(600)
 
   const count1 = await ui.executeJavaScript(`document.querySelectorAll('.tab').length`)

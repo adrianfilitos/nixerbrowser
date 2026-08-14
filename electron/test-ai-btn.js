@@ -1,0 +1,30 @@
+const { app, BrowserWindow } = require('electron')
+const path = require('path')
+const os = require('os')
+const fs = require('fs')
+process.env.NIXER_USER_DATA = path.join(os.tmpdir(), 'nixer-ai-btn-test')
+fs.rmSync(process.env.NIXER_USER_DATA, { recursive: true, force: true })
+require('./main')
+const delay = (ms) => new Promise((r) => setTimeout(r, ms))
+app.whenReady().then(async () => {
+  let win = null
+  for (let i = 0; i < 25 && !win; i++) { const ws = BrowserWindow.getAllWindows(); if (ws.length) win = ws[0]; else await delay(400) }
+  const ui = win.webContents
+  const waitTab = () => ui.executeJavaScript(`(async () => { for (let i = 0; i < 60; i++) { if (document.querySelector('.tab')) return true; await new Promise(r => setTimeout(r, 200)) } return false })()`)
+  await waitTab()
+  await delay(1200)
+  const aiButtons = await ui.executeJavaScript(`Array.from(document.querySelectorAll('button')).filter(b => (b.className || '').includes('ai-btn') || (b.className || '').includes('ai-tool-btn')).map(b => b.className)`)
+  await ui.executeJavaScript(`(() => { const i = document.querySelector('.address-bar input'); i.focus(); const setVal = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; setVal.call(i, '/hola'); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+  await delay(500)
+  const aiPanelOpen = await ui.executeJavaScript(`!!document.querySelector('.ai-panel')`)
+  const aiModeOn = await ui.executeJavaScript(`!!document.querySelector('.ai-btn.on')`)
+  await ui.executeJavaScript(`(() => { const i = document.querySelector('.address-bar input'); const setVal = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; setVal.call(i, 'google.com'); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+  await delay(400)
+  const aiPanelClosed = await ui.executeJavaScript(`!document.querySelector('.ai-panel')`)
+  console.log('AI_BUTTONS:', JSON.stringify({ aiButtons, aiPanelOpen, aiModeOn, aiPanelClosed }))
+  const ok = aiButtons.length === 1 && aiPanelOpen && aiPanelClosed
+  console.log('RESULT:', ok ? 'AI_OK' : 'AI_FAIL')
+  win.close()
+  setTimeout(() => app.exit(ok ? 0 : 1), 300)
+}).catch((e) => { console.log('ERR', e && e.stack); app.exit(2) })
+setTimeout(() => { console.log('HARD_TIMEOUT'); app.exit(3) }, 90000)

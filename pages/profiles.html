@@ -28,6 +28,7 @@
   <body>
     <main>
       <h1>Perfiles</h1>
+      <div id="status" style="min-height:22px;font-size:12px;color:var(--accent);margin-bottom:6px"></div>
       <div id="list"></div>
       <div class="new">
         <input id="newName" placeholder="Nombre del nuevo perfil…" />
@@ -36,6 +37,17 @@
     </main>
     <script>
       var list = document.getElementById('list')
+      var status = document.getElementById('status')
+
+      function switchProfile(name) {
+        if (document.querySelector('.profile.current')) {
+          var cur = document.querySelector('.profile.current .info b').textContent
+          if (name === 'default') name = cur === 'Perfil principal' ? 'default' : name
+        }
+        status.textContent = 'Cambiando al perfil "' + name + '"…'
+        document.querySelectorAll('button').forEach(function (b) { b.disabled = true })
+        browserAPI.profiles.switch(name)
+      }
 
       function render() {
         browserAPI.profiles.list().then(function (d) {
@@ -50,7 +62,7 @@
             row.querySelector('.info b').textContent = name === 'default' ? 'Perfil principal' : name
             row.querySelector('.info span').textContent = name === d.current ? 'En uso' : (name === 'default' ? 'Perfil por defecto' : '')
             var use = row.querySelector('.use')
-            if (use) use.onclick = function () { browserAPI.profiles.switch(name) }
+            if (use) use.onclick = function () { switchProfile(name) }
             var del = row.querySelector('.del')
             if (del) del.onclick = async function () {
               if (confirm('¿Borrar el perfil "' + name + '" y todos sus datos?')) {
@@ -65,7 +77,7 @@
       document.getElementById('create').onclick = function () {
         var name = document.getElementById('newName').value.trim()
         if (!name) return
-        browserAPI.profiles.switch(name)
+        switchProfile(name)
       }
       render()
       browserAPI.settings.get().then(function (s) {

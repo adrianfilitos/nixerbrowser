@@ -1,27 +1,27 @@
 export const SHIFT_CHARS = new Set('!?@#$%&*()_+=:;"\'<>/\\|{}[]~`'.split(''))
 
-export function typeIntoWebview(el, key) {
-  if (!el) return
+export function typeIntoWebview(id, key) {
+  if (!id) return
   try {
     if (key === 'space') {
-      el.sendInputEvent({ type: 'keyDown', keyCode: ' ' })
-      el.sendInputEvent({ type: 'char', keyCode: ' ' })
-      el.sendInputEvent({ type: 'keyUp', keyCode: ' ' })
+      window.api.tabInput(id, { type: 'keyDown', keyCode: ' ' })
+      window.api.tabInput(id, { type: 'char', keyCode: ' ' })
+      window.api.tabInput(id, { type: 'keyUp', keyCode: ' ' })
     } else if (key === 'enter') {
-      el.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' })
-      el.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' })
+      window.api.tabInput(id, { type: 'keyDown', keyCode: 'Enter' })
+      window.api.tabInput(id, { type: 'keyUp', keyCode: 'Enter' })
     } else if (key === 'backspace') {
-      el.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' })
-      el.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' })
+      window.api.tabInput(id, { type: 'keyDown', keyCode: 'Backspace' })
+      window.api.tabInput(id, { type: 'keyUp', keyCode: 'Backspace' })
     } else if (key.length === 1) {
       let mods = []
       let kc = key
       if (/^[A-ZÑ]$/.test(key)) mods = ['shift']
       else if (SHIFT_CHARS.has(key)) mods = ['shift']
       else kc = key.toUpperCase()
-      el.sendInputEvent({ type: 'keyDown', keyCode: kc, modifiers: mods })
-      el.sendInputEvent({ type: 'char', keyCode: key })
-      el.sendInputEvent({ type: 'keyUp', keyCode: kc, modifiers: mods })
+      window.api.tabInput(id, { type: 'keyDown', keyCode: kc, modifiers: mods })
+      window.api.tabInput(id, { type: 'char', keyCode: key })
+      window.api.tabInput(id, { type: 'keyUp', keyCode: kc, modifiers: mods })
     }
   } catch {}
 }

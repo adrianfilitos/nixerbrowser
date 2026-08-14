@@ -60,7 +60,8 @@ function gcHiddenWebviews() {
     if (ctx.activeWcId) activeIds.add(ctx.activeWcId)
   }
   for (const wc of webContents.getAllWebContents()) {
-    if (wc.getType() !== 'webview' || wc.isDestroyed() || activeIds.has(wc.id)) continue
+    const t = wc.getType()
+    if ((t !== 'webview' && t !== 'browserView') || wc.isDestroyed() || activeIds.has(wc.id)) continue
     const win = BrowserWindow.fromWebContents(wc)
     if (!win || !windows.has(win)) continue
     try { wc.executeJavaScript('if (window.gc) window.gc()') } catch {}
@@ -103,6 +104,7 @@ function appInfo() {
     name: 'Nixer Browser',
     version: app.getVersion(),
     build: buildHash(),
+    buildTime: buildTime(),
     electron: process.versions.electron,
     chrome: process.versions.chrome,
     node: process.versions.node,
@@ -126,6 +128,16 @@ function buildHash() {
     _buildHash = app.isPackaged ? 'dist' : 'dev'
   }
   return _buildHash
+}
+
+let _buildTime = null
+function buildTime() {
+  if (_buildTime) return _buildTime
+  try {
+    const p = path.join(__dirname, '..', 'dist', 'index.html')
+    if (fs.existsSync(p)) _buildTime = new Date(fs.statSync(p).mtime).toISOString()
+  } catch {}
+  return _buildTime || ''
 }
 
 module.exports = {

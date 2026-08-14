@@ -54,7 +54,18 @@ function createMenus(deps) {
   const { createWindow, extractReader, savePageOf, saveAsUrl, captureScreenshot, togglePip, ai, readerGet, readerPut, translatePage, translateText } = deps
 
   function buildMenu() {
-    const act = (action, data) => { const c = currentCtx(); if (c) sendUi(c, action, data) }
+    const act = (action, data) => {
+      const c = currentCtx()
+      if (!c) return
+      // El foco de teclado vive en la WebContentsView de la página; al pedir
+      // "enfocar barra" hay que devolverle el foco OS al chrome para que la
+      // barra de direcciones reciba realmente la escritura.
+      if (action === 'focus-address') {
+        const w = ui(c)
+        if (w && !w.isDestroyed()) { try { w.focus() } catch {} }
+      }
+      sendUi(c, action, data)
+    }
     const wc = () => { const c = currentCtx(); return c ? activeWc(c) : null }
     const template = [
       {
@@ -105,7 +116,7 @@ function createMenus(deps) {
           { label: 'Adelante', accelerator: 'Alt+Right', click: () => { const w = wc(); if (w && w.navigationHistory.canGoForward()) w.navigationHistory.goForward() } },
           { label: 'Inicio', accelerator: 'Alt+Home', click: () => act('home') },
           { type: 'separator' },
-          { label: 'Recargar', accelerator: 'CmdOrCtrl+R', click: () => { const w = wc(); if (w) w.reload() } },
+          { label: 'Recargar', accelerator: 'CmdOrCtrl+R', click: () => act('reload') },
           { label: 'Recargar sin caché', accelerator: 'CmdOrCtrl+Shift+R', click: () => { const w = wc(); if (w) w.reloadIgnoringCache() } },
           { label: 'Detener', accelerator: 'Esc', click: () => { const w = wc(); if (w) w.stop() } },
           { type: 'separator' },
@@ -183,7 +194,7 @@ function createMenus(deps) {
       {
         label: 'IA',
         submenu: [
-          { label: 'Chat con IA', accelerator: 'CmdOrCtrl+Alt+A', click: () => act('open-page', 'ai') },
+          { label: 'Chat con IA', accelerator: 'CmdOrCtrl+Alt+A', click: () => act('toggle-ai') },
           { label: 'Configurar IA', click: () => act('open-page', 'settings') },
           { label: 'Resumir esta página', click: async () => {
             const w = wc()
@@ -202,7 +213,7 @@ function createMenus(deps) {
         label: 'Ajustes',
         submenu: [
           { label: 'Ajustes', accelerator: 'CmdOrCtrl+,', click: () => act('open-page', 'settings') },
-          { label: 'Perfiles', click: () => act('open-page', 'profiles') },
+          { label: 'Perfiles', click: () => act('open-page', 'settings') },
           { label: 'Lista de lectura', click: () => act('open-page', 'readinglist') },
           { label: 'Descargas', accelerator: 'CmdOrCtrl+J', click: () => act('open-page', 'downloads') },
           { label: 'Contraseñas', click: () => act('open-page', 'passwords') },
@@ -267,7 +278,7 @@ function createMenus(deps) {
     template.push(
       { label: 'Atrás', click: () => { if (wc && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack() } },
       { label: 'Adelante', click: () => { if (wc && wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward() } },
-      { label: 'Recargar', click: () => wc && wc.reload() }
+      { label: 'Recargar', click: () => sendUi(ctx, 'reload') }
     )
     template.push({ type: 'separator' })
   if (params.mediaType === 'image') {

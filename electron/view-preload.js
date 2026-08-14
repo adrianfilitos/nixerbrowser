@@ -157,15 +157,36 @@ if (IS_INTERNAL_PAGE) {
   downloads: {
     list: () => ipcRenderer.invoke('downloads:list'),
     clear: () => ipcRenderer.invoke('downloads:clear'),
+    remove: (id) => ipcRenderer.invoke('downloads:remove', id),
     cancel: (id) => ipcRenderer.invoke('downloads:cancel', id),
     open: (p) => ipcRenderer.invoke('downloads:open', p),
     show: (p) => ipcRenderer.invoke('downloads:show', p),
     folder: (p) => ipcRenderer.invoke('downloads:folder', p),
+    preview: (p) => ipcRenderer.invoke('downloads:preview', p),
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch) => ipcRenderer.invoke('settings:set', patch),
     defaults: () => ipcRenderer.invoke('settings:defaults'),
+  },
+  profiles: {
+    status: () => ipcRenderer.invoke('profiles:status'),
+    list: () => ipcRenderer.invoke('profiles:list'),
+    createLocal: (name, color) => ipcRenderer.invoke('profiles:create-local', name, color),
+    switch: (id) => ipcRenderer.invoke('profiles:switch', id),
+    update: (id, patch) => ipcRenderer.invoke('profiles:update', id, patch),
+    remove: (id) => ipcRenderer.invoke('profiles:remove', id),
+    signupCloud: (email, password, adopt) => ipcRenderer.invoke('profiles:signup-cloud', email, password, adopt),
+    signinCloud: (email, password, adopt) => ipcRenderer.invoke('profiles:signin-cloud', email, password, adopt),
+    signinProvider: (provider, adopt) => ipcRenderer.invoke('profiles:signin-provider', provider, adopt),
+    signout: () => ipcRenderer.invoke('profiles:signout'),
+    syncNow: () => ipcRenderer.invoke('profiles:sync-now'),
+  },
+  permissions: {
+    list: () => ipcRenderer.invoke('permissions:list'),
+    set: (origin, permission, state) => ipcRenderer.invoke('permissions:set', origin, permission, state),
+    clear: (origin) => ipcRenderer.invoke('permissions:clear', origin),
+    clearAll: () => ipcRenderer.invoke('permissions:clear-all'),
   },
   search: {
     engines: () => ipcRenderer.invoke('search:engines'),
@@ -223,11 +244,6 @@ if (IS_INTERNAL_PAGE) {
   app: {
     info: () => ipcRenderer.invoke('app:info'),
   },
-  profiles: {
-    list: () => ipcRenderer.invoke('profiles:list'),
-    switch: (name) => ipcRenderer.invoke('profiles:switch', name),
-    remove: (name) => ipcRenderer.invoke('profiles:delete', name),
-  },
   groups: {
     get: () => ipcRenderer.invoke('groups:get'),
     set: (g) => ipcRenderer.invoke('groups:set', g),
@@ -243,6 +259,11 @@ if (IS_INTERNAL_PAGE) {
     const l = (_e, d) => cb(d)
     ipcRenderer.on('downloads-updated', l)
     return () => ipcRenderer.removeListener('downloads-updated', l)
+  },
+  onSettings: (cb) => {
+    const l = (_e, d) => cb(d)
+    ipcRenderer.on('settings-updated', l)
+    return () => ipcRenderer.removeListener('settings-updated', l)
   },
   })
 }
